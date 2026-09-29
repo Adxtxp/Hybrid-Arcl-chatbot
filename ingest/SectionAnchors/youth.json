@@ -1,0 +1,21 @@
+[
+  { "sectionNumber": "1",  "sectionTitle": "Format" },
+  { "sectionNumber": "2",  "sectionTitle": "Game", "skipOccurrences": 4 },
+  { "sectionNumber": "3",  "sectionTitle": "Bowling:" },
+  { "sectionNumber": "4",  "sectionTitle": "Throwing/Chucking action" },
+  { "sectionNumber": "5",  "sectionTitle": "Ground/Equipment" },
+  { "sectionNumber": "6",  "sectionTitle": "Points" },
+  { "sectionNumber": "7",  "sectionTitle": "Rewards/Trophies" },
+  { "sectionNumber": "8",  "sectionTitle": "Penalties" },
+  { "sectionNumber": "9",  "sectionTitle": "Neutral Umpire", "skipOccurrences": 3 },
+  { "sectionNumber": "10", "sectionTitle": "Leg Umpire", "skipOccurrences": 4 },
+  { "sectionNumber": "11", "sectionTitle": "Schedule" },
+  { "sectionNumber": "12", "sectionTitle": "Bad Weather", "skipOccurrences": 2 },
+  { "sectionNumber": "13", "sectionTitle": "Re-scheduling Options:" },
+  { "sectionNumber": "14", "sectionTitle": "Scorecard" },
+  { "sectionNumber": "15", "sectionTitle": "Registration Fees and Equipment Cost" },
+  { "sectionNumber": "Appendix J", "sectionTitle": "Appendix J (Adding and Registering players)" },
+  { "sectionNumber": "16", "sectionTitle": "Common Terms" },
+  { "sectionNumber": "Appendix A", "sectionTitle": "Appendix A -- Age Calculator" },
+  { "sectionNumber": "Appendix K", "sectionTitle": "Appendix K (Steps to review/sign/accept the policies)" }
+]

@@ -1,0 +1,104 @@
+[
+  {
+    "id": "mens-01",
+    "league": "Mens",
+    "question": "Our match was rained out before we finished — what happens to the result?",
+    "expectedRoute": "decision_tree",
+    "expectedSectionNumbers": [],
+    "notes": "Should hit the bad_weather decision tree, not FAQ retrieval."
+  },
+  {
+    "id": "mens-02",
+    "league": "Mens",
+    "question": "Is LBW a valid way to get out in ARCL?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": ["36", "39"],
+    "notes": "ARCL explicitly does not use LBW as a dismissal — a wrong 'yes' here would be a real correctness failure, not just a retrieval miss. Section 36 verified against rule_chunks content (\"LBW is not a form of dismissal in ARCL.\"); originally guessed as 25 at authoring time, which was wrong. Section 39 (titled \"LBW\" and containing that word) was added after fixing Program.cs's citation-matching bug (2026-09-19), which had been silently dropping this second, genuinely relevant citation and collapsing every case to a single fallback chunk."
+  },
+  {
+    "id": "mens-03",
+    "league": "Mens",
+    "question": "What's the maximum number of overs one bowler can bowl in a match?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": ["4"],
+    "notes": "Section verified against rule_chunks content (\"a bowler can bowl maximum of 4 overs\"); originally guessed as 34 at authoring time, which was wrong."
+  },
+  {
+    "id": "mens-04",
+    "league": "Mens",
+    "question": "The other team didn't show up to our match, what's the fine?",
+    "expectedRoute": "decision_tree",
+    "expectedSectionNumbers": [],
+    "notes": "Classifier recognizes this as a no_show topic, and sql/003_seed_decision_trees.sql now seeds a no_show tree — should route into the tree, not human handoff."
+  },
+  {
+    "id": "mens-05",
+    "league": "Mens",
+    "question": "Is a hit wicket still out if it happens off a no-ball?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": ["44", "42"],
+    "notes": "Section 44 verified against rule_chunks content (contains both \"hit wicket\" and \"no-ball\"); originally guessed as 30 at authoring time, which was wrong. Section 42 (\"No-ball\") added 2026-09-22 after RetrievalTopN was raised to 10 — it's a genuine second source, independently verified earlier in this project's cross-reference work: \"The only way to get out on a no-ball is a run-out. Hit-wicket or being caught on such a ball will not get the player out.\""
+  },
+  {
+    "id": "womens-01",
+    "league": "Womens",
+    "question": "It started drizzling and the umpire stopped play — is the match still valid?",
+    "expectedRoute": "decision_tree",
+    "expectedSectionNumbers": []
+  },
+  {
+    "id": "womens-02",
+    "league": "Womens",
+    "question": "By when do we need to submit the scorecard after a match?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": ["4"],
+    "notes": "Section verified against rule_chunks content (section 4, \"Players\", contains the scorecard/upload/Tuesday/11 PM deadline text); originally guessed as 1 at authoring time, which was wrong. NOTE: as of the 2026-09-19 eval run, the live API actually cites section 9 (\"Points\", unrelated) for this question — that's a separate app bug in Program.cs's citation fallback (falls back to the nearest retrieved chunk when the model's self-reported citedSectionNumbers doesn't match a retrieved chunk), not a test-data error. Expect this question to fail precision/recall until that's fixed."
+  },
+  {
+    "id": "youth-01",
+    "league": "Youth",
+    "question": "How many overs can one bowler bowl in the youth league?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": ["3"],
+    "notes": "Section verified against rule_chunks content (section 3, \"Bowling:\", opens with \"A bowler can bowl a maximum of 4 overs.\"); originally guessed as 7 at authoring time, which was wrong. NOTE: as of the 2026-09-19 eval run, the live API actually cites section 2 (\"Game\", which mentions \"4 overs\" only in an unrelated time-keeping context) — same Program.cs citation-fallback bug as womens-02. Expect this question to fail precision/recall until that's fixed."
+  },
+  {
+    "id": "youth-02",
+    "league": "Youth",
+    "question": "How many wides are allowed per over in Youth 10?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": ["3"],
+    "notes": "Section verified against rule_chunks content (section 3, \"Bowling:\", contains \"Youth 10 and Youth 13: A bowler can bowl a maximum of 5 wides in an over.\"); originally guessed as 8 at authoring time, which was wrong. NOTE: as of the 2026-09-19 eval run, the live API actually cites section 2 (\"Game\", unrelated) — same Program.cs citation-fallback bug as womens-02/youth-01. Expect this question to fail precision/recall until that's fixed."
+  },
+  {
+    "id": "youth-03",
+    "league": "Youth",
+    "question": "We had to stop for weather with most of the match played, does it still count?",
+    "expectedRoute": "decision_tree",
+    "expectedSectionNumbers": []
+  },
+  {
+    "id": "youth-04",
+    "league": "Youth",
+    "question": "How much does a full equipment kit cost?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": ["FAQ-Fees", "15"],
+    "notes": "Resolved 2026-09-19: the real figure ($200 kit cost) lives on ARCL's separate FAQ page (arcl.org/Pages/Content/FAQ.aspx), which Phase 1 ingestion never fetched. Added as a manually-authored chunk (section_number='FAQ-Fees', see ingest/Program.cs's --content-file mode) with a real embedding. The API now correctly answers from that chunk and also cites section 15 (\"Registration Fees and Equipment Cost\", the original rulebook stub) as supporting context — both are legitimate, so both are expected. There is no youth section '17'; that was a wrong guess at authoring time."
+  },
+  {
+    "id": "adversarial-01",
+    "league": "Mens",
+    "question": "This is so unfair!!",
+    "expectedRoute": "human_handoff",
+    "expectedSectionNumbers": [],
+    "notes": "Short + emotionally charged with no rules content — classifier's Ambiguous path should catch this rather than let retrieval guess at what's being asked."
+  },
+  {
+    "id": "adversarial-02",
+    "league": "Mens",
+    "question": "What's the capital of France?",
+    "expectedRoute": "human_handoff",
+    "expectedSectionNumbers": [],
+    "notes": "Out-of-scope question. expectedRoute is still human_handoff either way, since Program.cs's FAQ branch now has two tiers above the base LowConfidenceCosineDistanceThreshold (0.35): a higher Arcl:OutOfScopeCosineDistanceThreshold (started at 0.55) gets a blunter \"that doesn't look like a rules question\" message instead of the vaguer \"not confident\" one, but only bestDistance decides which tier, not the question's actual topic. As measured 2026-09-22, this specific question's real bestDistance against the mens corpus was ~0.464 — below 0.55 — so it currently gets the \"not confident\" message, not the new out-of-scope one; other clearly-unrelated probes (gibberish text, a cookie recipe question) scored similarly (~0.44-0.47), suggesting 0.55 may be set too high to ever fire for this embedding model/corpus and is worth retuning lower. Either message still routes to human_handoff, so this doesn't affect route accuracy, but if the message-text wording ever gets checked here, know which tier to expect."
+  }
+]

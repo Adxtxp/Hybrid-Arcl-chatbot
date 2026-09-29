@@ -1,0 +1,326 @@
+/* Admin-page-only rules. Shared variables/reset/header/gatekeeper styles come from styles.css —
+   this file only adds what the chat UI never needed: cards, data tables, and the sticky
+   header/section nav (all scoped to admin.html; nothing here reaches the chat UI). */
+
+/* Status colors (dataviz skill's palette.md) — reserved for state, never a chart series. Always
+   paired with an icon + label below, never color alone. */
+:root {
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --admin-header-h: 56px;
+  --admin-nav-h: 44px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 2px 4px rgba(0,0,0,0.05), 0 6px 16px rgba(0,0,0,0.08);
+}
+
+html { scroll-behavior: smooth; }
+
+/* A slightly cooler, faintly gradient surface instead of the flat --bg — admin-only (this rule
+   never loads on index.html), and only overrides the tone, not the reading contrast. */
+body { background: linear-gradient(180deg, #f8f9f7 0%, #f1f3f0 100%) fixed; }
+
+.admin-app .app-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: var(--admin-header-h);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+}
+
+.header-title { display: flex; align-items: baseline; gap: 10px; }
+.last-updated { font-size: 0.72rem; font-weight: 400; opacity: 0.8; }
+
+.admin-nav {
+  position: sticky;
+  top: var(--admin-header-h);
+  z-index: 25;
+  height: var(--admin-nav-h);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 16px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+
+.admin-nav-link {
+  flex: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  transition: background 0.15s, color 0.15s;
+}
+.admin-nav-link:hover { background: var(--bot-bubble); color: var(--arcl-green-dark); }
+.admin-nav-link.active { background: var(--arcl-green); color: white; }
+
+.admin-main section { scroll-margin-top: calc(var(--admin-header-h) + var(--admin-nav-h) + 16px); }
+
+.insights-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.insight {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--muted);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.insight.good { border-left-color: var(--status-good); }
+.insight.warning { border-left-color: var(--status-warning); }
+.insight.serious { border-left-color: var(--status-serious); }
+.insight-icon { flex: none; font-size: 0.95rem; }
+.insight-text strong { font-weight: 700; }
+
+.error-text { color: var(--danger); font-size: 0.85rem; margin-top: 10px; }
+
+#admin-key-form { display: flex; gap: 8px; margin-top: 16px; }
+
+#admin-key-form input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+#admin-key-form button {
+  padding: 10px 18px;
+  border: none;
+  background: var(--arcl-green);
+  color: white;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-app { display: flex; flex-direction: column; min-height: 100vh; }
+
+.admin-main {
+  flex: 1;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.admin-main h2 {
+  margin-bottom: 4px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.muted { color: var(--muted); font-size: 0.85rem; margin-top: 0; }
+
+.card-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--arcl-green);
+  border-radius: 10px;
+  padding: 16px 18px;
+  min-width: 150px;
+  flex: 1 1 150px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+
+.card .card-value { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.card .card-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+/* Wraps every <table class="admin-table"> (see admin.html) so a wide table scrolls horizontally
+   inside its own box on a narrow screen instead of blowing out the page's width — the table
+   itself is untouched (stays display:table), only this wrapper gets the scroll behavior, which is
+   the reliable version of this pattern (a table set to display:block directly is inconsistent
+   across browsers once its thead/tbody/tr keep their own table-* display roles). */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; }
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 0.88rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.admin-table th, .admin-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.admin-table th {
+  background: var(--bot-bubble);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: var(--muted);
+}
+/* Caps a cell's height so one long response/question can't stretch the whole row — without this,
+   a table row's height matches its tallest cell (plain HTML table behavior), and on a horizontally
+   scrolled narrow screen that shows up as a huge blank gap under the *other*, shorter cells in that
+   same row, since their content ends early but the row itself is still as tall as the off-screen
+   long cell. `title` on the cell (see admin.js) keeps the full text reachable via hover/tap-hold. */
+.cell-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.admin-table tbody tr:last-child td { border-bottom: none; }
+.admin-table tbody tr:nth-child(even) { background: rgba(0,0,0,0.015); }
+.admin-table tbody tr:hover { background: var(--bot-bubble); }
+.admin-table tbody tr.reviewed { opacity: 0.55; }
+
+.status-pill {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.status-pill.open { background: #fff4e5; color: #8a5a00; border: 1px solid #f0c36d; }
+.status-pill.reviewed { background: #e6f4ea; color: var(--arcl-green-dark); border: 1px solid #a7d7b6; }
+
+.review-form { display: flex; flex-direction: column; gap: 6px; min-width: 160px; }
+
+.review-form input {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
+.review-form button {
+  padding: 6px 10px;
+  border: none;
+  background: var(--arcl-green);
+  color: white;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.review-form button:hover { background: var(--arcl-green-dark); }
+
+.cell-note { font-size: 0.78rem; color: var(--muted); margin-top: 4px; font-style: italic; }
+
+/* ---------------------------------------------------------------------- charts
+   Categorical palette: validated (node scripts/validate_palette.js) against this page's white
+   card surface — see the dataviz skill's references/palette.md for the full check report.
+   Fixed slot order (never cycled): 1 blue, 2 orange, 3 aqua, 4 yellow. Slots 3-4 sit under 3:1
+   contrast on white by design (documented in palette.md) — every chart that uses them ships a
+   legend/direct label, never color alone, and the raw-data table beside each chart is its
+   table-view fallback. */
+:root {
+  --viz-series-1: #2a78d6; /* blue */
+  --viz-series-2: #eb6834; /* orange */
+  --viz-series-3: #1baf7a; /* aqua */
+  --viz-series-4: #eda100; /* yellow */
+  --viz-ink-primary: var(--text);
+  --viz-ink-secondary: var(--muted);
+  --viz-gridline: var(--border);
+  --viz-surface: var(--card-bg);
+}
+
+.charts-row { display: flex; flex-wrap: wrap; gap: 16px; }
+.charts-row > .chart-card { flex: 1 1 320px; }
+
+.chart-card {
+  background: var(--viz-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px 8px;
+  position: relative; /* tooltip anchor */
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s ease;
+}
+.chart-card:hover { box-shadow: var(--shadow-md); }
+
+.chart-card h3 { margin: 0 0 2px; font-size: 0.95rem; }
+.chart-card .muted { margin-bottom: 10px; }
+
+.viz-svg { display: block; overflow: visible; }
+
+.viz-gridline { stroke: var(--viz-gridline); stroke-width: 1; }
+.viz-axis-label { fill: var(--viz-ink-secondary); font-size: 10px; }
+.viz-end-label { fill: var(--viz-ink-primary); font-size: 11px; font-weight: 600; }
+.viz-inline-label { fill: #ffffff; font-size: 11px; font-weight: 600; pointer-events: none; }
+.viz-inline-label-outside { fill: var(--viz-ink-primary); font-size: 11px; font-weight: 600; dominant-baseline: middle; }
+
+.viz-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.viz-marker { stroke: var(--viz-surface); stroke-width: 2; }
+.viz-crosshair { stroke: var(--viz-ink-secondary); stroke-width: 1; stroke-dasharray: 2 2; pointer-events: none; }
+.viz-hit { cursor: pointer; }
+
+.viz-bar-segment { transition: opacity 0.1s; cursor: pointer; }
+.viz-bar-segment:hover { opacity: 0.82; }
+
+.viz-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; padding-bottom: 8px; }
+.viz-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--viz-ink-secondary); }
+.viz-legend-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+.viz-tooltip {
+  position: absolute;
+  transform: translate(-50%, -115%);
+  background: var(--text);
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  white-space: nowrap;
+}
+.viz-tooltip.hidden { display: none; }
+.viz-tooltip-row { display: flex; align-items: center; gap: 6px; }
+.viz-tooltip-row + .viz-tooltip-row { margin-top: 3px; }
+.viz-tooltip-key { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
+.viz-tooltip-value { font-weight: 700; }
+.viz-tooltip-label { color: #d8d8d8; }
+
+/* ---------------------------------------------------------------------- mobile
+   This is an internal tool mostly opened on a desktop, but "opened the link on my phone to check
+   something" is common enough to be worth not breaking: wide tables scroll inside .table-scroll
+   instead of blowing out the page, the sticky header sheds its timestamp so title+Refresh always
+   fit on one line within its fixed height, and cards/charts get a touch more breathing room. */
+@media (max-width: 640px) {
+  .admin-main { padding: 14px; gap: 22px; }
+  .card-row { gap: 8px; }
+  .card { min-width: 128px; padding: 12px 14px; }
+  .card .card-value { font-size: 1.4rem; }
+  .admin-nav { padding: 0 10px; }
+  .admin-nav-link { font-size: 0.76rem; padding: 6px 10px; }
+}
+
+@media (max-width: 480px) {
+  .last-updated { display: none; } /* keeps the sticky header's title + Refresh button on one line within its fixed height */
+}

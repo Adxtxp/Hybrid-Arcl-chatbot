@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ARCL — widget embed test</title>
+<style>
+  /* Deliberately plain/unrelated styles, standing in for arcl.org's real page, to prove the
+     widget's own styles (all prefixed arcl-cw-) don't clash with — or get clashed by — a host
+     page's existing CSS. */
+  body { font-family: Georgia, serif; margin: 0; padding: 40px; background: #fafafa; color: #222; }
+  h1 { font-size: 2rem; }
+  .content { max-width: 700px; margin: 0 auto; }
+  button { font-family: inherit; } /* a host page's own generic button rule, to check for bleed-through */
+</style>
+</head>
+<body>
+  <div class="content">
+    <h1>American Recreational Cricket League</h1>
+    <p>This page stands in for arcl.org's real site, to verify the chat widget script embeds
+       cleanly: a floating launcher in the corner, opening a popup chat window, without needing
+       any changes to this page beyond the one script tag at the bottom.</p>
+    <p>Scroll around, resize the window, and open the widget — it should look and behave the same
+       regardless of what this host page's own styles do.</p>
+  </div>
+
+  <!-- The entire integration: one script tag. data-src points at the chat UI (defaults to
+       index.html next to widget.js if omitted). -->
+  <script src="widget.js" data-src="index.html" defer></script>
+</body>
+</html>

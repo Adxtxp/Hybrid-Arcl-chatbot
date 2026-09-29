@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>ARCL Admin</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+
+  <!-- Gate on the admin key, same pattern as index.html's league gatekeeper. The key is kept in a
+       plain JS variable only (see admin.js) — never localStorage — so it doesn't linger in the
+       browser as a readable credential; re-enter it after a refresh. -->
+  <div id="admin-gate" class="overlay">
+    <div class="gatekeeper-card">
+      <h1>ARCL Admin</h1>
+      <p>Enter the admin key to continue.</p>
+      <form id="admin-key-form">
+        <input id="admin-key-input" type="password" placeholder="Admin key" autocomplete="off" />
+        <button type="submit">Enter</button>
+      </form>
+      <p id="admin-key-error" class="error-text hidden">Invalid admin key.</p>
+    </div>
+  </div>
+
+  <div id="admin-app" class="admin-app hidden">
+    <header class="app-header">
+      <div class="header-title">
+        ARCL Admin
+        <span id="last-updated" class="last-updated"></span>
+      </div>
+      <div class="header-actions">
+        <button id="refresh-btn">Refresh</button>
+      </div>
+    </header>
+
+    <nav class="admin-nav" aria-label="Dashboard sections">
+      <a href="#section-summary" class="admin-nav-link">Summary</a>
+      <a href="#section-insights" class="admin-nav-link">Insights</a>
+      <a href="#section-route-breakdown" class="admin-nav-link">Routes</a>
+      <a href="#section-trends" class="admin-nav-link">Trends</a>
+      <a href="#section-daily-activity" class="admin-nav-link">Daily activity</a>
+      <a href="#section-league-volume" class="admin-nav-link">Leagues</a>
+      <a href="#section-dropoff" class="admin-nav-link">Stuck trees</a>
+      <a href="#section-top-chunks" class="admin-nav-link">Top rules</a>
+      <a href="#section-top-unanswered" class="admin-nav-link">Unanswered</a>
+      <a href="#section-review-queue" class="admin-nav-link">Review queue</a>
+    </nav>
+
+    <main class="admin-main">
+      <section id="section-summary">
+        <h2>Last 7 days</h2>
+        <div id="summary-cards" class="card-row"></div>
+      </section>
+
+      <section id="section-insights">
+        <h2>Insights</h2>
+        <p class="muted">Computed live from the data on this page — not a separate model call, just the numbers stated plainly.</p>
+        <ul id="insights-list" class="insights-list"></ul>
+      </section>
+
+      <section id="section-route-breakdown">
+        <h2>Route breakdown <span class="muted">(last 7 days)</span></h2>
+        <div class="chart-card">
+          <div id="route-breakdown-chart"></div>
+        </div>
+      </section>
+
+      <section id="section-trends">
+        <h2>Trends <span class="muted">(last 14 days)</span></h2>
+        <div class="charts-row">
+          <div class="chart-card">
+            <h3>Query volume</h3>
+            <p class="muted">Total queries per day.</p>
+            <div id="query-trend-chart"></div>
+          </div>
+          <div class="chart-card">
+            <h3>Gemini cost</h3>
+            <p class="muted">Estimated USD per day.</p>
+            <div id="cost-trend-chart"></div>
+          </div>
+        </div>
+        <div class="chart-card" style="margin-top: 12px;">
+          <h3>Token usage</h3>
+          <p class="muted">Prompt vs. completion tokens per day.</p>
+          <div id="token-usage-chart"></div>
+        </div>
+      </section>
+
+      <section id="section-daily-activity">
+        <h2>Daily activity</h2>
+        <p class="muted">Same numbers as the charts above, as a table.</p>
+        <div class="table-scroll">
+          <table class="admin-table" id="daily-activity-table">
+            <thead>
+              <tr>
+                <th>Date</th><th>Queries</th><th>Prompt tokens</th><th>Completion tokens</th>
+                <th>Total cost (USD)</th><th>Avg cost/query (USD)</th><th>👍</th><th>👎</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="section-league-volume">
+        <h2>Query volume by league <span class="muted">(last 7 days)</span></h2>
+        <div class="chart-card">
+          <div id="league-volume-chart"></div>
+        </div>
+        <div class="table-scroll" style="margin-top: 12px;">
+          <table class="admin-table" id="league-volume-table">
+            <thead><tr><th>Date</th><th>League</th><th>Queries</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="section-dropoff">
+        <h2>Stuck decision trees <span id="dropoff-count" class="league-badge"></span></h2>
+        <p class="muted">Sessions that started a decision tree (rain, no-show, etc.) and have sat idle mid-tree for over an hour — a real visitor who didn't get an answer.</p>
+        <div class="table-scroll">
+          <table class="admin-table" id="dropoff-table">
+            <thead><tr><th>Last active</th><th>League</th><th>Stuck at question</th><th>Session</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="section-top-chunks">
+        <h2>Most-asked-about rule sections <span class="muted">(last 30 days)</span></h2>
+        <p class="muted">What retrieval actually pulls most often — useful for prioritizing new decision trees or rulebook clarifications.</p>
+        <div class="chart-card">
+          <div id="top-chunks-chart"></div>
+        </div>
+        <div class="table-scroll" style="margin-top: 12px;">
+          <table class="admin-table" id="top-chunks-table">
+            <thead><tr><th>League</th><th>Section</th><th>Title</th><th>Times retrieved</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="section-top-unanswered">
+        <h2>Most commonly unanswered questions</h2>
+        <p class="muted">The exact same question, asked more than once, that the bot has never successfully answered — the clearest signal of what to fix next.</p>
+        <div class="chart-card" id="top-unanswered-chart-card">
+          <div id="top-unanswered-chart"></div>
+        </div>
+        <div class="table-scroll" style="margin-top: 12px;">
+          <table class="admin-table" id="top-unanswered-table">
+            <thead><tr><th>Question</th><th>Times asked</th><th>Last asked</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="section-review-queue">
+        <h2>Review queue <span id="review-queue-count" class="league-badge"></span></h2>
+        <p class="muted">Every human-handoff and every thumbs-down — everything the bot got wrong or couldn't answer.</p>
+        <div class="table-scroll">
+          <table class="admin-table" id="review-queue-table">
+            <thead>
+              <tr>
+                <th>Date</th><th>League</th><th>Route</th><th>Feedback</th>
+                <th>Question</th><th>Response</th><th>Status</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="charts.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

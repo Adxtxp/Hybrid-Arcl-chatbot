@@ -1,0 +1,67 @@
+using System.Text.RegularExpressions;
+
+namespace Arcl.Api.Services;
+
+public enum IntentRoute { Faq, DecisionTree, Ambiguous, TeamRanking }
+
+public sealed record IntentResult(IntentRoute Route, string? DecisionTreeTopic);
+
+/// <summary>
+/// Deterministic-first classifier: a free keyword/regex pass catches the known decision-tree
+/// topics before any LLM call happens. This is the whole point of the cost-saving hybrid design
+/// from the blueprint — classifying every message with an LLM first would burn the budget the
+/// deterministic routing exists to save.
+///
+/// Add a topic here + a matching root node (topic column on decision_tree_nodes, see
+/// sql/001_schema.sql) whenever a new rule area needs strict step-by-step navigation instead of
+/// free-text FAQ answering. Only "bad_weather" ships with a seeded decision tree right now (see
+/// sql/003_seed_decision_trees.sql) — the others below are wired into the classifier but will
+/// fall through to human handoff until someone builds their trees too.
+/// </summary>
+public sealed class IntentClassifier
+{
+    // Order matters: first matching topic wins. Keep patterns narrow — a false positive here
+    // routes a normal FAQ question into a rigid decision tree instead of just answering it.
+    private static readonly (string Topic, Regex Pattern)[] DecisionTreeTopics =
+    {
+        ("bad_weather", new Regex(@"\b(rain\w*|weather\w*|drizzl\w*|wash(ed)?[\s-]?out|abandon(ed|ment)?|stopped? (the )?(game|match))\b", RegexOptions.IgnoreCase)),
+        ("no_show", new Regex(@"\b(no[\s-]?show|forfeit(ed)?|didn'?t (show|turn) up|team (never|didn'?t) (show|arrive))\b", RegexOptions.IgnoreCase)),
+        ("tie_breaking", new Regex(@"\b(tie[\s-]?break(er|ing)?|equal points|same points|playoff tie)\b", RegexOptions.IgnoreCase)),
+    };
+
+    // Signals a message might need a human regardless of topic — surfaced as Ambiguous so the
+    // caller can offer the escape hatch rather than force a route.
+    private static readonly Regex AmbiguousSignal = new(
+        @"\b(dispute|complain(t)?|unfair|cheat(ed|ing)?|argu(e|ment)|appeal)\b", RegexOptions.IgnoreCase);
+
+    // Team names on arcl.org are unconstrained free text (the site's own team directory includes
+    // names like "1", "8", and "A Few Good Men" — see TeamRankingService.cs), so there's no
+    // reliable way to pull a team name out of an arbitrary sentence with a regex. This only
+    // detects that a ranking/standing question was asked at all; Program.cs always follows up by
+    // asking which team, then treats the next message, verbatim, as the name.
+    private static readonly Regex TeamRankingSignal = new(
+        @"\b(rankings?|standings?|where (do|does) (we|our team|my team) stand|how (are|is) (we|our team|my team) doing)\b",
+        RegexOptions.IgnoreCase);
+
+    public IntentResult Classify(string message)
+    {
+        if (TeamRankingSignal.IsMatch(message))
+            return new IntentResult(IntentRoute.TeamRanking, null);
+
+        foreach (var (topic, pattern) in DecisionTreeTopics)
+        {
+            if (pattern.IsMatch(message))
+                return new IntentResult(IntentRoute.DecisionTree, topic);
+        }
+
+        if (AmbiguousSignal.IsMatch(message) && message.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length < 6)
+        {
+            // Short + emotionally charged ("this is unfair!") — too little to retrieve against
+            // confidently. Longer messages with the same words usually contain enough detail for
+            // FAQ retrieval to work, so only the short case gets treated as ambiguous.
+            return new IntentResult(IntentRoute.Ambiguous, null);
+        }
+
+        return new IntentResult(IntentRoute.Faq, null);
+    }
+}

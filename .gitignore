@@ -1,0 +1,31 @@
+# .NET build output
+bin/
+obj/
+*.user
+
+# IDE
+.vs/
+.vscode/*
+!.vscode/extensions.json
+
+# api/wwwroot is a generated copy of frontend/* (see README's "Serving everything from one
+# origin") — frontend/ is the source of truth, wwwroot is a build artifact re-copied from it.
+api/wwwroot/*
+!api/wwwroot/.gitkeep
+
+# eval run output
+eval/results/
+eval/bin/Debug/*/results/
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# One-off local debugging scratch (not project source) — kept on disk, not in the repo
+/api-log.txt
+/api/test-questions.json
+/ingest/diag*.ps1
+/ingest/*_extracted_debug.txt
+/ingest/fetch_tree_sources.sql
+/ingest/fetch_womens_tail.sql
+/sql/002_fulltext_optional.sql.txt

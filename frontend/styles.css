@@ -1,0 +1,446 @@
+:root {
+  --arcl-green: #1f6f3d;
+  --arcl-green-dark: #164f2b;
+  --bg: #f6f7f5;
+  --card-bg: #ffffff;
+  --text: #1a1a1a;
+  --muted: #6b7280;
+  --border: #e2e5e0;
+  --bot-bubble: #eef3ee;
+  --user-bubble: #1f6f3d;
+  --user-bubble-text: #ffffff;
+  --danger: #b3261e;
+  --focus-ring: 0 0 0 3px rgba(31, 111, 61, 0.16);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 2px 4px rgba(0,0,0,0.05), 0 6px 16px rgba(0,0,0,0.08);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cardIn { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes bubbleIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.hidden { display: none !important; }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 30, 24, 0.5);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  animation: overlayIn 0.15s ease-out;
+}
+
+.gatekeeper-card, .nrr-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 32px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.22);
+  animation: cardIn 0.2s ease-out;
+}
+
+.brand-mark {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, var(--arcl-green) 0%, var(--arcl-green-dark) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  margin: 0 0 14px;
+  box-shadow: 0 3px 8px rgba(31, 111, 61, 0.35);
+}
+
+.brand-mark-sm {
+  width: 26px;
+  height: 26px;
+  font-size: 0.9rem;
+  margin: 0;
+  display: inline-flex;
+  vertical-align: middle;
+  box-shadow: none;
+  background: rgba(255,255,255,0.15);
+}
+
+.gatekeeper-card h1 { margin-top: 0; font-size: 1.4rem; letter-spacing: -0.01em; }
+.gatekeeper-card p { color: var(--muted); }
+
+.league-buttons { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+
+.league-btn {
+  flex: 1 1 auto;
+  padding: 12px 16px;
+  border: 1.5px solid var(--arcl-green);
+  background: white;
+  color: var(--arcl-green-dark);
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+.league-btn:hover { background: var(--arcl-green); color: white; box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.league-btn:active { transform: translateY(0) scale(0.98); }
+.league-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: linear-gradient(165deg, var(--arcl-green) 0%, var(--arcl-green-dark) 100%);
+  color: white;
+  flex-wrap: wrap;
+  gap: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  position: relative;
+  z-index: 5;
+}
+
+.header-title { font-weight: 700; display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
+
+.league-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(255,255,255,0.2);
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-left: 4px;
+}
+
+.header-actions button {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.5);
+  color: white;
+  border-radius: 7px;
+  padding: 7px 12px;
+  margin-left: 6px;
+  cursor: pointer;
+  font-size: 0.83rem;
+  font-weight: 500;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.header-actions button:hover { background: rgba(255,255,255,0.22); border-color: rgba(255,255,255,0.8); }
+.header-actions button:active { transform: scale(0.97); }
+.header-actions button:focus-visible { outline: 2px solid white; outline-offset: 1px; }
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bubble {
+  max-width: 75%;
+  padding: 11px 15px;
+  border-radius: 16px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  box-shadow: var(--shadow-sm);
+  animation: bubbleIn 0.18s ease-out;
+}
+
+.bubble.bot {
+  background: var(--bot-bubble);
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+  border: 1px solid rgba(31, 111, 61, 0.08);
+}
+
+.bubble.user {
+  background: var(--user-bubble);
+  color: var(--user-bubble-text);
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+  box-shadow: 0 1px 2px rgba(31,111,61,0.15), 0 2px 8px rgba(31,111,61,0.2);
+}
+
+.bubble.handoff {
+  background: #fff8ec;
+  border: 1px solid #f0c36d;
+}
+.bubble.handoff::before { content: "\26A0\FE0F  "; }
+
+.bubble.suggested-questions {
+  max-width: 90%;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+}
+
+.suggested-questions-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.suggested-questions-list { display: flex; flex-wrap: wrap; gap: 7px; }
+
+.suggested-question-chip {
+  font-size: 0.83rem;
+  padding: 7px 12px;
+  background: var(--bot-bubble);
+  border-color: rgba(31, 111, 61, 0.35);
+}
+.suggested-question-chip:hover { background: var(--arcl-green); }
+
+.bubble a { color: var(--arcl-green-dark); font-weight: 600; }
+.bubble.user a { color: white; text-decoration-color: rgba(255,255,255,0.6); }
+
+.citations {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0,0,0,0.07);
+  font-size: 0.76rem;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.citations a {
+  display: inline-block;
+  background: rgba(31, 111, 61, 0.08);
+  color: var(--arcl-green-dark);
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.citations a:hover { background: rgba(31, 111, 61, 0.16); text-decoration: underline; }
+
+.feedback-row { margin-top: 6px; display: flex; gap: 4px; }
+
+.feedback-row button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.9rem;
+  opacity: 0.55;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, opacity 0.15s, transform 0.1s;
+}
+
+.feedback-row button:hover:not(:disabled) { opacity: 1; background: rgba(0,0,0,0.06); transform: scale(1.1); }
+.feedback-row button.selected { opacity: 1; background: var(--bot-bubble); }
+.feedback-row button:disabled { cursor: default; }
+
+.decision-chips {
+  padding: 10px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  background: var(--card-bg);
+}
+
+.chip {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--arcl-green);
+  background: white;
+  color: var(--arcl-green-dark);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+.chip:hover { background: var(--arcl-green); color: white; box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.chip:active { transform: translateY(0) scale(0.97); }
+.chip:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.chat-form {
+  display: flex;
+  padding: 14px 16px;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  background: var(--card-bg);
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.03);
+}
+
+.chat-form input {
+  flex: 1;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 1rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.chat-form input:focus { outline: none; border-color: var(--arcl-green); box-shadow: var(--focus-ring); }
+
+.chat-form button {
+  padding: 10px 20px;
+  border: none;
+  background: var(--arcl-green);
+  color: white;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.chat-form button:hover { background: var(--arcl-green-dark); }
+.chat-form button:active { transform: scale(0.96); }
+.chat-form button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.nrr-card h2 { margin-top: 0; font-size: 1.25rem; letter-spacing: -0.01em; }
+
+.nrr-card fieldset {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  padding: 4px 12px 10px;
+}
+
+.nrr-card legend {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--arcl-green-dark);
+  padding: 0 6px;
+}
+
+.nrr-card label {
+  display: block;
+  margin: 8px 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.nrr-card input {
+  width: 100%;
+  padding: 8px 10px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 0.95rem;
+  color: var(--text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.nrr-card input:focus { outline: none; border-color: var(--arcl-green); box-shadow: var(--focus-ring); }
+
+.nrr-formula { font-size: 0.8rem; color: var(--muted); }
+.nrr-note { font-size: 0.75rem; color: var(--muted); }
+
+.nrr-result {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  padding: 14px;
+  background: var(--bot-bubble);
+  border: 1px solid rgba(31, 111, 61, 0.12);
+  border-radius: 10px;
+  margin: 12px 0;
+  color: var(--arcl-green-dark);
+}
+
+#nrr-close-btn {
+  width: 100%;
+  padding: 11px;
+  border: none;
+  background: var(--arcl-green);
+  color: white;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+#nrr-close-btn:hover { background: var(--arcl-green-dark); }
+#nrr-close-btn:active { transform: scale(0.98); }
+
+.embedded .header-title { display: none; } /* widget.js's own shell already shows a title — see app.js */
+
+/* ---------------------------------------------------------------------- mobile
+   The chat is the one page real visitors actually use on their phones (standalone or inside the
+   widget), so this is the pass that matters most. Verified at 375x667 (iPhone SE, the tightest
+   common width) and 390x844 via Playwright device emulation. */
+@media (max-width: 640px) {
+  .app-header {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .header-title { font-size: 0.95rem; }
+
+  .header-actions {
+    display: flex;
+    gap: 6px;
+    margin-left: 0;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* actions are duplicated nowhere else on mobile, so a scrollbar
+                               fighting for the same 40px header strip is pure noise, not a real
+                               affordance loss — the row still scrolls fine by touch/swipe */
+  }
+  .header-actions::-webkit-scrollbar { display: none; }
+
+  .header-actions button {
+    margin-left: 0;
+    flex: none;
+    padding: 7px 11px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .messages { padding: 12px; gap: 8px; }
+
+  .bubble { max-width: 88%; padding: 10px 13px; font-size: 0.95rem; }
+  .bubble.suggested-questions { max-width: 96%; }
+
+  .chat-form {
+    padding: 10px 12px;
+    /* iOS home-indicator clearance — inert without viewport-fit=cover on the meta tag, which
+       index.html/admin.html both set, so this only ever adds space on devices that need it. */
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .chat-form input { font-size: 16px; } /* below 16px, iOS Safari auto-zooms in on focus — this pins it at the no-zoom threshold */
+
+  .feedback-row button { width: 32px; height: 32px; font-size: 1rem; } /* larger touch target than the 26px desktop size */
+
+  .gatekeeper-card, .nrr-card {
+    padding: 22px;
+    max-height: 88vh;
+    overflow-y: auto; /* the NRR card's two fieldsets + result can exceed a short phone's viewport height */
+  }
+
+  .decision-chips, .suggested-questions-list { gap: 6px; }
+  .chip { padding: 9px 14px; } /* slightly taller than desktop for an easier tap target */
+}
