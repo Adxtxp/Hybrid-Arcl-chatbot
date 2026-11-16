@@ -15,6 +15,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Phase 3 nightly re-crawl (RecrawlService.cs) chunks pages with the same code + anchors as the ingest tool. -->
+    <ProjectReference Include="..\shared\Arcl.Ingestion\Arcl.Ingestion.csproj" />
+    <None Include="..\ingest\SectionAnchors\*.json" Link="SectionAnchors\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Cross-encoder model files (scripts/download-reranker.ps1, gitignored) ship with a publish
          so the re-ranker works on the server too, not just under `dotnet run`. -->
     <None Include="models\**" CopyToPublishDirectory="PreserveNewest" />

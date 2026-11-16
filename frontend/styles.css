@@ -210,6 +210,10 @@ body {
 .bubble.kind-handoff { background: #fff8ec; border: 1px solid #f0c36d; }
 .bubble.kind-handoff .kind-label { color: #8a5a00; }
 
+/* Monthly budget cap reached: the matching rule text itself instead of a written answer. */
+.bubble.kind-sections_only { background: #f7f5ef; border: 1px solid #d9cfae; }
+.bubble.kind-sections_only .kind-label { color: #6b5a1e; }
+
 /* Contact form submitted. */
 .bubble.kind-handoff_sent { background: #edf7ef; border: 1px solid #9ccfa9; }
 .bubble.kind-handoff_sent .kind-label { color: var(--arcl-green-dark); }

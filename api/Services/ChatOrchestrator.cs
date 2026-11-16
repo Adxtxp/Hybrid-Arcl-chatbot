@@ -62,6 +62,7 @@ public sealed class ChatOrchestrator
     private readonly TeamRankingService _teamRanking;
     private readonly ConversationLogger _log;
     private readonly OutputFilter _outputFilter;
+    private readonly BudgetGovernor _budget;
     private readonly ILogger<ChatOrchestrator> _logger;
 
     private readonly string _supportContact;
@@ -73,7 +74,7 @@ public sealed class ChatOrchestrator
     public ChatOrchestrator(
         SessionService sessions, IntentClassifier classifier, RetrievalService retrieval, DecisionTreeService decisionTrees,
         GeminiClient gemini, TeamRankingService teamRanking, ConversationLogger log, OutputFilter outputFilter,
-        IConfiguration config, ILogger<ChatOrchestrator> logger)
+        BudgetGovernor budget, IConfiguration config, ILogger<ChatOrchestrator> logger)
     {
         _sessions = sessions;
         _classifier = classifier;
@@ -83,6 +84,7 @@ public sealed class ChatOrchestrator
         _teamRanking = teamRanking;
         _log = log;
         _outputFilter = outputFilter;
+        _budget = budget;
         _logger = logger;
 
         _supportContact = config.GetNonEmpty("Arcl:SupportContact")
@@ -164,9 +166,12 @@ public sealed class ChatOrchestrator
         Exception? failure = null;
         try
         {
-            history = await _log.GetRecentTurnsAsync(req.SessionId, _memoryTurns, ct);
+            // Look further back than we'll keep, then keep only what relates to this message
+            // (MemorySelector) — a fresh topic doesn't drag unrelated exchanges into the prompt.
+            history = await _log.GetRecentTurnsAsync(req.SessionId, _memoryTurns * 3, ct);
             if (req.Regenerate && history.Count > 0 && history[^1].Question.Trim() == req.Message.Trim())
                 history = history.Take(history.Count - 1).ToList(); // don't anchor the retry on the answer being replaced
+            history = MemorySelector.Select(history, req.Message, _memoryTurns);
 
             var retrievalQuery = BuildRetrievalQuery(req.Message, history);
             retrieval = await _retrieval.HybridSearchAsync(retrievalQuery, league, DateOnly.FromDateTime(DateTime.UtcNow), ct);
@@ -202,6 +207,23 @@ public sealed class ChatOrchestrator
             yield break;
         }
         var tier = retrieval.BestDistance <= _highThreshold ? "high" : "medium";
+
+        // ---- cost governor: past the monthly cap, answer with the sections themselves
+        var budgetExhausted = false;
+        try
+        {
+            budgetExhausted = (await _budget.GetStateAsync(ct)).Exhausted;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Fail open: a budget-check hiccup shouldn't take answers away from visitors.
+            _logger.LogError(ex, "Budget check failed; answering normally.");
+        }
+        if (budgetExhausted)
+        {
+            yield return ChatEvent.Done(await SectionsOnlyAsync(req, chunks, retrieval.BestDistance, tier, stopwatch, ct));
+            yield break;
+        }
 
         yield return new ChatEvent("sources", chunks.Select(ToCitation).ToList());
 
@@ -410,6 +432,27 @@ public sealed class ChatOrchestrator
     // Distinguish "essentially unrelated to the corpus" from "on-topic but not confident enough" —
     // a flat "not confident" reads as if the question WAS about rules but retrieval came up short,
     // which is misleading for something like "what's the capital of France?".
+    // Monthly Gemini budget reached (BudgetGovernor): no model call — show the best-matching
+    // section's opening text plus links to the top sections. Retrieval itself still runs, so this
+    // is still a targeted answer, just not a summarized one.
+    private async Task<ChatResponse> SectionsOnlyAsync(
+        ChatRequest req, IReadOnlyList<RetrievedChunk> chunks, double bestDistance, string tier, Stopwatch stopwatch, CancellationToken ct)
+    {
+        var top = chunks[0];
+        var (excerpt, _) = PromptSanitizer.SanitizeContext(top.Content, maxChars: 500);
+        var message =
+            $"Written answers are paused until next month, so here's the rule text that best matches your question.\n\n" +
+            $"From Section {top.SectionNumber} ({top.SectionTitle}):\n{excerpt}\n\n" +
+            $"For anything this doesn't settle, use \"Contact Human Support\" or email {_supportContact}.";
+        var related = chunks.GroupBy(c => c.SectionNumber).Select(g => g.First()).Take(3).Select(ToCitation).ToList();
+
+        var logId = await _log.LogAsync(req.SessionId, req.Message, RoutePath.Faq, message,
+            (int)stopwatch.ElapsedMilliseconds, tokenCostUsd: 0m, retrievedChunkIds: new[] { top.ChunkId },
+            bestDistance: bestDistance, confidenceTier: tier, ct: ct);
+        return new ChatResponse(logId, "faq", message, new[] { ToCitation(top) }, Array.Empty<DecisionOption>(), true,
+            Kind: "sections_only", Confidence: tier, RelatedLinks: related);
+    }
+
     private async Task<ChatResponse> OutOfScopeAsync(ChatRequest req, League league, double bestDistance, Stopwatch stopwatch, CancellationToken ct)
     {
         var message =

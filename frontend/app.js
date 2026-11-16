@@ -514,6 +514,7 @@ const KIND_LABELS = {
   error: "Something went wrong",
   handoff: "Needs a league admin",
   handoff_sent: "Request sent",
+  sections_only: "Rule text (written answers paused)", // monthly budget cap reached — see BudgetGovernor.cs
 };
 
 function createBotBubble(kind) {
@@ -544,7 +545,7 @@ function addBotMessage(text, { kind = "info", logId = null, citations = [], rela
     bubble.appendChild(buildRelatedLinks(relatedLinks));
   }
 
-  if (kind === "low_confidence" || kind === "handoff") {
+  if (kind === "low_confidence" || kind === "handoff" || kind === "sections_only") {
     bubble.appendChild(buildActionButton("Contact a league admin", () => openContactForm()));
   }
   if (kind === "error" && retry) {

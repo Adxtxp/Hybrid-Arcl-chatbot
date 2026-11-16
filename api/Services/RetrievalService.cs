@@ -161,6 +161,14 @@ public sealed class RetrievalService
 
     // ------------------------------------------------------------------ corpus snapshot (BM25)
 
+    /// <summary>Drops the BM25 snapshots so the next query reloads them — called by RecrawlService
+    /// after it updates rule_chunks, so new rule text is searchable immediately rather than after
+    /// Arcl:CorpusCacheMinutes.</summary>
+    public void InvalidateCache()
+    {
+        lock (_cache) _cache.Clear();
+    }
+
     private async Task<CorpusSnapshot> GetCorpusAsync(League league, DateOnly asOf, CancellationToken ct)
     {
         if (TryGetFresh(league, asOf, out var cached)) return cached;

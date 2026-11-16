@@ -91,6 +91,7 @@ public sealed class ConversationLogger
             SELECT TOP (@maxTurns) query, response_text
             FROM dbo.conversation_log
             WHERE session_id = @sessionId AND confidence_tier IN ('high', 'medium') AND response_text IS NOT NULL
+              AND token_cost_usd > 0 -- a real model answer; excludes "sections only" turns logged while the budget cap was hit
             ORDER BY log_id DESC
             """, conn);
         cmd.Parameters.AddWithValue("@sessionId", sessionId);
@@ -100,6 +101,31 @@ public sealed class ConversationLogger
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
             turns.Add(new ConversationTurn(reader.GetString(0), reader.GetString(1)));
+        turns.Reverse();
+        return turns;
+    }
+
+    /// <summary>The session's last few exchanges, whatever route they took, oldest first — the
+    /// conversation included in a contact-form email so the admin sees what the visitor already
+    /// asked and what the bot told them, without opening the admin page.</summary>
+    public async Task<IReadOnlyList<(string Question, string? Answer)>> GetTranscriptAsync(Guid sessionId, int maxTurns, CancellationToken ct = default)
+    {
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(
+            """
+            SELECT TOP (@maxTurns) query, response_text
+            FROM dbo.conversation_log
+            WHERE session_id = @sessionId
+            ORDER BY log_id DESC
+            """, conn);
+        cmd.Parameters.AddWithValue("@sessionId", sessionId);
+        cmd.Parameters.AddWithValue("@maxTurns", maxTurns);
+
+        var turns = new List<(string, string?)>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            turns.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1)));
         turns.Reverse();
         return turns;
     }

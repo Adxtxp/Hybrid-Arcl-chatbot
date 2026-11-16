@@ -9,11 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="HtmlAgilityPack" Version="1.11.61" />
-    <!-- 6.1+ is where SqlVector<float> / SqlDbTypeExtensions.Vector landed; pin >=7.0 to stay comfortably past that -->
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.3" />
-    <!-- Pinned above SqlClient's vulnerable transitive 9.0.13 — same as api/ArclChatbot.Api.csproj -->
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
+    <!-- Fetch/chunk/upsert/embed all live in the shared library (also used by the API's re-crawl). -->
+    <ProjectReference Include="..\shared\Arcl.Ingestion\Arcl.Ingestion.csproj" />
   </ItemGroup>
 
   <ItemGroup>

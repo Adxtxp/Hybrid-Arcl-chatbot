@@ -324,3 +324,40 @@ body { background: linear-gradient(180deg, #f8f9f7 0%, #f1f3f0 100%) fixed; }
 @media (max-width: 480px) {
   .last-updated { display: none; } /* keeps the sticky header's title + Refresh button on one line within its fixed height */
 }
+
+/* ---------------------------------------------------------------------- system health (Phase 3) */
+.subhead { display: flex; align-items: center; gap: 10px; margin: 22px 0 4px; font-size: 1rem; }
+.alerts-list { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 14px; }
+.alert-card {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--status-warning);
+  border-radius: 10px;
+  background: var(--card-bg);
+  padding: 10px 14px;
+  box-shadow: var(--shadow-sm);
+}
+.alert-card.alert-critical { border-left-color: var(--status-serious); background: #fdf3f2; }
+.alert-card.alert-info { border-left-color: var(--status-good); }
+.alert-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.alert-head .cell-note { margin-top: 0; }
+.alert-body { white-space: pre-wrap; font-size: 0.86rem; margin: 6px 0 8px; color: var(--text); }
+.health-card { flex: 1 1 260px; }
+.card-value-sm { font-size: 1.15rem; }
+.meter { height: 8px; border-radius: 999px; background: rgba(0,0,0,0.08); overflow: hidden; margin-top: 8px; }
+.meter-fill { height: 100%; width: 0; background: var(--status-good); transition: width 0.3s; }
+.meter-fill.meter-warn { background: var(--status-warning); }
+.meter-fill.meter-full { background: var(--status-serious); }
+.small-btn {
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--arcl-green);
+  background: white;
+  color: var(--arcl-green-dark);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+}
+.subhead .small-btn { margin-top: 0; }
+.small-btn:hover:not(:disabled) { background: var(--bot-bubble); }
+.small-btn:disabled { opacity: 0.6; cursor: default; }

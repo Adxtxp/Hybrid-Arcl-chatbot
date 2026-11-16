@@ -105,15 +105,16 @@ el.keyForm.addEventListener("submit", async (e) => {
 el.refreshBtn.addEventListener("click", () => loadAll());
 
 async function loadAll() {
-  const [summaryResp, queueResp, dropoffResp, topChunksResp, topUnansweredResp] = await Promise.all([
+  const [summaryResp, queueResp, dropoffResp, topChunksResp, topUnansweredResp, healthResp] = await Promise.all([
     adminFetch("/api/admin/summary"),
     adminFetch("/api/admin/review-queue"),
     adminFetch("/api/admin/decision-tree-dropoff"),
     adminFetch("/api/admin/top-chunks"),
     adminFetch("/api/admin/top-unanswered"),
+    adminFetch("/api/admin/health"),
   ]);
 
-  const responses = [summaryResp, queueResp, dropoffResp, topChunksResp, topUnansweredResp];
+  const responses = [summaryResp, queueResp, dropoffResp, topChunksResp, topUnansweredResp, healthResp];
   if (responses.some((r) => r.status === 401)) return false;
   if (responses.some((r) => !r.ok)) {
     alert("Couldn't load admin data. Check the API is running and try again.");
@@ -125,6 +126,7 @@ async function loadAll() {
   const topChunks = await topChunksResp.json();
   const topUnanswered = await topUnansweredResp.json();
 
+  renderHealth(await healthResp.json());
   renderSummary(summary);
   renderReviewQueue(await queueResp.json());
   renderDropoff(dropoff);
@@ -134,6 +136,148 @@ async function loadAll() {
   el.lastUpdated.textContent = `Updated ${new Date().toLocaleTimeString()}`;
   return true;
 }
+
+// ---------------------------------------------------------------------- system health (Phase 3)
+// Alerts (also emailed), budget, email setup, content freshness, drift trend — GET /api/admin/health.
+// Alert bodies and source messages are server-generated but may quote page/rule text, so they're
+// rendered with textContent like everything else here.
+
+const STATUS_LABELS = {
+  unchanged: ["Up to date", "reviewed"],
+  updated: ["Updated", "reviewed"],
+  needs_review: ["Needs review", "open"],
+  fetch_failed: ["Fetch failed", "open"],
+};
+
+function renderHealth(h) {
+  // ---- alerts
+  const list = document.getElementById("alerts-list");
+  list.innerHTML = "";
+  if (h.alerts.length === 0) {
+    const ok = document.createElement("p");
+    ok.className = "muted";
+    ok.textContent = "✓ No open alerts.";
+    list.appendChild(ok);
+  }
+  for (const a of h.alerts) {
+    const card = document.createElement("div");
+    card.className = `alert-card alert-${a.severity}`;
+    const head = card.appendChild(document.createElement("div"));
+    head.className = "alert-head";
+    const title = head.appendChild(document.createElement("strong"));
+    title.textContent = a.subject;
+    const when = head.appendChild(document.createElement("span"));
+    when.className = "cell-note";
+    when.textContent = `${new Date(a.createdAt).toLocaleString()} · ${a.emailed ? "emailed" : "NOT emailed" + (a.emailError ? `: ${a.emailError}` : "")}`;
+
+    const body = card.appendChild(document.createElement("div"));
+    body.className = "alert-body";
+    body.textContent = a.body;
+
+    const ack = card.appendChild(document.createElement("button"));
+    ack.className = "small-btn";
+    ack.textContent = "Acknowledge";
+    ack.addEventListener("click", async () => {
+      ack.disabled = true;
+      const resp = await adminFetch(`/api/admin/alerts/${a.alertId}/acknowledge`, { method: "POST" });
+      if (resp.ok) card.remove();
+      else ack.disabled = false;
+    });
+    list.appendChild(card);
+  }
+
+  // ---- budget
+  const b = h.budget;
+  document.getElementById("budget-value").textContent = `$${Number(b.spentUsd).toFixed(2)} / $${Number(b.capUsd).toFixed(2)}`;
+  const pct = Math.min(100, b.percentUsed);
+  const fill = document.getElementById("budget-meter");
+  fill.style.width = `${pct}%`;
+  fill.className = "meter-fill" + (b.exhausted ? " meter-full" : pct >= 80 ? " meter-warn" : "");
+  document.getElementById("budget-meter-wrap").setAttribute("aria-valuenow", String(Math.round(pct)));
+  document.getElementById("budget-note").textContent = b.exhausted
+    ? "Cap reached — the bot is showing rule sections instead of written answers until next month."
+    : `${b.percentUsed.toFixed(1)}% used. At 100%, written answers pause until the month rolls over.`;
+
+  // ---- email
+  document.getElementById("email-status").textContent = h.emailConfigured ? "Sending via SMTP" : "Not set up";
+  if (!h.emailConfigured) {
+    document.getElementById("test-email-result").textContent =
+      "Emails are being saved to the api/outbox folder instead of sent. Set Arcl:Email:* to send them.";
+  }
+
+  // ---- content freshness
+  const sources = document.querySelector("#sources-table tbody");
+  sources.innerHTML = "";
+  if (h.sources.length === 0) {
+    const tr = sources.appendChild(document.createElement("tr"));
+    const td = appendCell(tr, "Not crawled yet — the first check runs a couple of minutes after the API starts.");
+    td.colSpan = 7;
+  }
+  for (const s of h.sources) {
+    const tr = document.createElement("tr");
+    appendCell(tr, s.league);
+    const page = appendCell(tr, s.url.replace(/^https?:\/\/(www\.)?/, ""));
+    page.title = s.url;
+    const [label, pillClass] = STATUS_LABELS[s.lastStatus] ?? [s.lastStatus ?? "—", "open"];
+    const statusCell = tr.appendChild(document.createElement("td"));
+    const pill = statusCell.appendChild(document.createElement("span"));
+    pill.className = `status-pill ${pillClass}`;
+    pill.textContent = label;
+    appendCell(tr, s.lastCheckedAt ? new Date(s.lastCheckedAt).toLocaleString() : "—");
+    appendCell(tr, s.lastChangedAt ? new Date(s.lastChangedAt).toLocaleString() : "—");
+    appendCell(tr, s.sectionsMatched ?? "—");
+    const msg = appendCell(tr, s.lastMessage ?? "");
+    msg.classList.add("cell-clamp");
+    msg.title = s.lastMessage ?? "";
+    sources.appendChild(tr);
+  }
+
+  // ---- drift
+  const drift = document.querySelector("#drift-table tbody");
+  drift.innerHTML = "";
+  if (h.drift.length === 0) {
+    const tr = drift.appendChild(document.createElement("tr"));
+    appendCell(tr, "No data yet.").colSpan = 4;
+  }
+  for (const w of h.drift) {
+    const tr = document.createElement("tr");
+    appendCell(tr, w.weekStart);
+    appendCell(tr, w.turns);
+    appendCell(tr, w.avgBestDistance != null ? w.avgBestDistance.toFixed(3) : "—");
+    appendCell(tr, `${(w.lowShare * 100).toFixed(0)}%`);
+    drift.appendChild(tr);
+  }
+}
+
+document.getElementById("test-email-btn").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const out = document.getElementById("test-email-result");
+  btn.disabled = true;
+  out.textContent = "Sending…";
+  try {
+    const r = await (await adminFetch("/api/admin/test-email", { method: "POST" })).json();
+    out.textContent = r.sent
+      ? (r.smtp ? `Sent to ${r.recipients.join(", ")}.` : "Saved to api/outbox (SMTP not configured).")
+      : `Failed: ${r.error}`;
+  } catch {
+    out.textContent = "Couldn't reach the API.";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("recrawl-btn").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  btn.textContent = "Re-crawling… (1–2 min)";
+  try {
+    await adminFetch("/api/admin/recrawl", { method: "POST" });
+    await loadAll();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Re-crawl now";
+  }
+});
 
 // ---------------------------------------------------------------------- summary
 

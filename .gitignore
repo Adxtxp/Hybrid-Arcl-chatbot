@@ -32,3 +32,6 @@ Thumbs.db
 /ingest/fetch_tree_sources.sql
 /ingest/fetch_womens_tail.sql
 /sql/002_fulltext_optional.sql.txt
+
+# Admin emails written locally when no SMTP server is configured (EmailSender.cs)
+api/outbox/

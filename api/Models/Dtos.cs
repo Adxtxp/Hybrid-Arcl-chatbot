@@ -146,3 +146,20 @@ public sealed record TopChunkItem(string League, string SectionNumber, string Se
 /// human_handoff every time) — not in any of the 6 original dashboard queries, since none of
 /// them group by question. The literal "what does the bot keep failing on" list.</summary>
 public sealed record TopUnansweredItem(string Query, int TimesAsked, DateTime LastAsked);
+
+// ---------------------------------------------------------------------- admin: operations (Phase 3)
+
+/// <summary>One crawled arcl.org page (sql/009 source_pages) — the "Content freshness" table.</summary>
+public sealed record SourcePageItem(
+    string League, string Url, DateTime? LastCheckedAt, DateTime? LastSuccessAt, DateTime? LastChangedAt,
+    string? LastStatus, string? LastMessage, int? SectionsMatched);
+
+/// <summary>One week of retrieval quality — the drift trend (see DriftCheck in MonitoringService.cs).</summary>
+public sealed record DriftWeek(DateOnly WeekStart, int Turns, double? AvgBestDistance, double LowShare);
+
+public sealed record BudgetSummary(decimal SpentUsd, decimal CapUsd, double PercentUsed, bool Exhausted);
+
+/// <summary>GET /api/admin/health — everything the "System health" panel shows.</summary>
+public sealed record AdminHealth(
+    IReadOnlyList<Arcl.Api.Services.AlertItem> Alerts, BudgetSummary Budget, IReadOnlyList<SourcePageItem> Sources,
+    IReadOnlyList<DriftWeek> Drift, bool EmailConfigured);

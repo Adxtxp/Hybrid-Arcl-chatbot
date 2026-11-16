@@ -37,6 +37,7 @@
     </header>
 
     <nav class="admin-nav" aria-label="Dashboard sections">
+      <a href="#section-health" class="admin-nav-link">Health</a>
       <a href="#section-summary" class="admin-nav-link">Summary</a>
       <a href="#section-insights" class="admin-nav-link">Insights</a>
       <a href="#section-route-breakdown" class="admin-nav-link">Routes</a>
@@ -50,6 +51,47 @@
     </nav>
 
     <main class="admin-main">
+      <!-- Phase 3 operations: alerts, budget, email, content freshness, drift -->
+      <section id="section-health">
+        <h2>System health</h2>
+        <div id="alerts-list" class="alerts-list"></div>
+
+        <div class="card-row">
+          <div class="card health-card">
+            <div class="card-label">Gemini budget (this month)</div>
+            <div id="budget-value" class="card-value">—</div>
+            <div class="meter" role="meter" aria-label="Budget used" aria-valuemin="0" aria-valuemax="100" id="budget-meter-wrap">
+              <div id="budget-meter" class="meter-fill"></div>
+            </div>
+            <div id="budget-note" class="cell-note"></div>
+          </div>
+          <div class="card health-card">
+            <div class="card-label">Admin emails</div>
+            <div id="email-status" class="card-value card-value-sm">—</div>
+            <button id="test-email-btn" class="small-btn">Send test email</button>
+            <div id="test-email-result" class="cell-note"></div>
+          </div>
+        </div>
+
+        <h3 class="subhead">Content freshness <button id="recrawl-btn" class="small-btn">Re-crawl now</button></h3>
+        <p class="muted">The rulebook and FAQ pages are re-checked every night. Changed sections are updated automatically; anything suspicious is held for review and emailed instead.</p>
+        <div class="table-scroll">
+          <table class="admin-table" id="sources-table">
+            <thead><tr><th>League</th><th>Page</th><th>Status</th><th>Last checked</th><th>Last changed</th><th>Sections</th><th>Details</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <h3 class="subhead">Retrieval quality by week</h3>
+        <p class="muted">How close questions land to the rule text (lower distance = better match), and how many got no confident answer. A rising trend triggers a drift alert.</p>
+        <div class="table-scroll">
+          <table class="admin-table" id="drift-table">
+            <thead><tr><th>Week of</th><th>Questions</th><th>Avg best distance</th><th>No confident answer</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
       <section id="section-summary">
         <h2>Last 7 days</h2>
         <div id="summary-cards" class="card-row"></div>

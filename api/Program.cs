@@ -36,6 +36,17 @@ builder.Services.AddSingleton<SessionService>();
 builder.Services.AddSingleton<AdminService>();
 builder.Services.AddSingleton<OutputFilter>();
 builder.Services.AddSingleton<SuggestionService>();
+
+// Phase 3: operations. The background services are registered as singletons first so admin
+// endpoints can call them directly (POST /api/admin/recrawl), then also as hosted services.
+builder.Services.AddSingleton<EmailSender>();
+builder.Services.AddSingleton<AlertService>();
+builder.Services.AddSingleton<BudgetGovernor>();
+builder.Services.AddSingleton<ExceptionCounter>();
+builder.Services.AddSingleton<RecrawlService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<RecrawlService>());
+builder.Services.AddSingleton<MonitoringService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<MonitoringService>());
 // Transient: it holds typed-HttpClient services (GeminiClient, TeamRankingService), which must
 // not be captured by a singleton or they'd keep one HttpClient forever.
 builder.Services.AddTransient<ChatOrchestrator>();
@@ -129,6 +140,23 @@ if (allowedOrigins.Length > 0)
 var app = builder.Build();
 
 if (trustForwardedHeaders) app.UseForwardedHeaders();
+
+// Unhandled exceptions are counted for MonitoringService's error alert (a crash that never
+// reaches conversation_log would otherwise be invisible to it), then rethrown as normal.
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception ex) when (ex is not OperationCanceledException)
+    {
+        context.RequestServices.GetRequiredService<ExceptionCounter>().Increment();
+        context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Unhandled")
+            .LogError(ex, "Unhandled exception on {Method} {Path}.", context.Request.Method, context.Request.Path);
+        throw;
+    }
+});
 
 if (requireHttps && !app.Environment.IsDevelopment())
 {
@@ -311,7 +339,9 @@ app.MapPost("/api/feedback", async (FeedbackRequest req, ConversationLogger logg
 // queue sees both kinds in one place; when the visitor leaves an email (with consent), that's
 // stored in handoff_requests and shown next to the question in the queue. Returns the message
 // text so the frontend renders the real contact info instead of keeping its own hardcoded copy.
-app.MapPost("/api/human-handoff", async (HumanHandoffRequest req, ConversationLogger logger, IConfiguration config, CancellationToken ct) =>
+app.MapPost("/api/human-handoff", async (
+    HumanHandoffRequest req, ConversationLogger logger, EmailSender emailSender, SessionService sessions, ILoggerFactory loggerFactory,
+    IConfiguration config, CancellationToken ct) =>
 {
     var supportContact = SupportContact(config);
     var message = (req.Message ?? "").Trim();
@@ -337,7 +367,41 @@ app.MapPost("/api/human-handoff", async (HumanHandoffRequest req, ConversationLo
     var logId = await logger.LogAsync(req.SessionId, message, RoutePath.HumanHandoff,
         reply, latencyMs: 0, tokenCostUsd: 0m, retrievedChunkIds: Array.Empty<Guid>(), ct: ct);
     if (!string.IsNullOrEmpty(email))
+    {
         await logger.LogHandoffRequestAsync(logId, req.SessionId, name, email, message, HandoffConsentText(config), ct);
+
+        // Phase 3 handoff: email the admins right away, with the conversation so far and the
+        // visitor as Reply-To — replying to the email answers the visitor directly. Sent in the
+        // background so a slow mail server never delays the visitor's confirmation; a failure is
+        // logged (the request itself is already saved and shows in the admin review queue).
+        var transcript = await logger.GetTranscriptAsync(req.SessionId, 8, ct);
+        var league = await sessions.GetLeagueAsync(req.SessionId, ct);
+        var body = new StringBuilder()
+            .AppendLine($"{name ?? "A visitor"} <{email}> asked for help from a league admin" +
+                        (league is null ? "." : $" ({league.Value.ToDisplayName()} league)."))
+            .AppendLine()
+            .AppendLine("THEIR MESSAGE")
+            .AppendLine(message)
+            .AppendLine()
+            .AppendLine("CONVERSATION WITH THE BOT (oldest first)");
+        foreach (var (q, a) in transcript.Where(t => t.Question != message))
+        {
+            // "[§4]" is the chat UI's link syntax — in plain-text email, "(§4)" reads better.
+            var answer = a is null ? "—" : System.Text.RegularExpressions.Regex.Replace(a, @"\[§([^\]]+)\]", " (§$1)");
+            body.AppendLine($"  Visitor: {q}").AppendLine($"  Bot:     {answer}").AppendLine();
+        }
+        body.AppendLine("Reply to this email to answer them directly. It's also in the admin page's review queue — mark it")
+            .AppendLine("reviewed there once handled.");
+
+        var subject = $"Help request from {name ?? email}";
+        var visitorEmail = email;
+        var log = loggerFactory.CreateLogger("Handoff");
+        _ = Task.Run(async () =>
+        {
+            try { await emailSender.SendToAdminsAsync(subject, body.ToString(), replyTo: visitorEmail); }
+            catch (Exception ex) { log.LogError(ex, "Couldn't email admins about handoff request {LogId}.", logId); }
+        });
+    }
 
     return Results.Ok(new { logId, message = reply });
 });
@@ -360,6 +424,52 @@ app.MapGet("/api/admin/top-chunks", async (AdminService admin, CancellationToken
 
 app.MapGet("/api/admin/top-unanswered", async (AdminService admin, CancellationToken ct) =>
     Results.Ok(await admin.GetTopUnansweredAsync(ct)));
+
+// ---- operations (Phase 3): alerts, budget, content freshness, drift
+
+app.MapGet("/api/admin/health", async (AdminService admin, AlertService alerts, BudgetGovernor budget, EmailSender email, CancellationToken ct) =>
+{
+    var b = await budget.GetStateAsync(ct);
+    return Results.Ok(new AdminHealth(
+        await alerts.GetOpenAsync(ct),
+        new BudgetSummary(b.SpentUsd, b.CapUsd, b.PercentUsed, b.Exhausted),
+        await admin.GetSourcesAsync(ct),
+        await admin.GetDriftTrendAsync(ct),
+        email.IsSmtpConfigured));
+});
+
+app.MapPost("/api/admin/alerts/{alertId:long}/acknowledge", async (long alertId, AlertService alerts, CancellationToken ct) =>
+{
+    try
+    {
+        await alerts.AcknowledgeAsync(alertId, ct);
+        return Results.NoContent();
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+
+// Re-crawl every configured page now instead of waiting for tonight. Takes a minute or two (it
+// fetches each page and re-embeds anything that changed); the response lists what happened.
+app.MapPost("/api/admin/recrawl", async (RecrawlService recrawl, CancellationToken ct) =>
+    Results.Ok(await recrawl.RunAsync(ct)));
+
+// Sends one test email to the admin recipients, to check the SMTP settings.
+app.MapPost("/api/admin/test-email", async (EmailSender email, CancellationToken ct) =>
+{
+    try
+    {
+        await email.SendToAdminsAsync("Test email from the ARCL Rules Assistant",
+            "If you're reading this, alert and help-request emails will reach you.", ct: ct);
+        return Results.Ok(new { sent = true, smtp = email.IsSmtpConfigured, recipients = email.AdminRecipients });
+    }
+    catch (Exception ex)
+    {
+        return Results.Ok(new { sent = false, smtp = email.IsSmtpConfigured, error = ex.Message });
+    }
+});
 
 app.MapPost("/api/admin/review-queue/{logId:long}/review", async (long logId, MarkReviewedRequest req, AdminService admin, CancellationToken ct) =>
 {
