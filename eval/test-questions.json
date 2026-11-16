@@ -12,7 +12,10 @@
     "league": "Mens",
     "question": "Is LBW a valid way to get out in ARCL?",
     "expectedRoute": "faq",
-    "expectedSectionNumbers": ["36", "39"],
+    "expectedSectionNumbers": [
+      "36",
+      "39"
+    ],
     "notes": "ARCL explicitly does not use LBW as a dismissal — a wrong 'yes' here would be a real correctness failure, not just a retrieval miss. Section 36 verified against rule_chunks content (\"LBW is not a form of dismissal in ARCL.\"); originally guessed as 25 at authoring time, which was wrong. Section 39 (titled \"LBW\" and containing that word) was added after fixing Program.cs's citation-matching bug (2026-09-19), which had been silently dropping this second, genuinely relevant citation and collapsing every case to a single fallback chunk."
   },
   {
@@ -20,7 +23,9 @@
     "league": "Mens",
     "question": "What's the maximum number of overs one bowler can bowl in a match?",
     "expectedRoute": "faq",
-    "expectedSectionNumbers": ["4"],
+    "expectedSectionNumbers": [
+      "4"
+    ],
     "notes": "Section verified against rule_chunks content (\"a bowler can bowl maximum of 4 overs\"); originally guessed as 34 at authoring time, which was wrong."
   },
   {
@@ -36,7 +41,10 @@
     "league": "Mens",
     "question": "Is a hit wicket still out if it happens off a no-ball?",
     "expectedRoute": "faq",
-    "expectedSectionNumbers": ["44", "42"],
+    "expectedSectionNumbers": [
+      "44",
+      "42"
+    ],
     "notes": "Section 44 verified against rule_chunks content (contains both \"hit wicket\" and \"no-ball\"); originally guessed as 30 at authoring time, which was wrong. Section 42 (\"No-ball\") added 2026-09-22 after RetrievalTopN was raised to 10 — it's a genuine second source, independently verified earlier in this project's cross-reference work: \"The only way to get out on a no-ball is a run-out. Hit-wicket or being caught on such a ball will not get the player out.\""
   },
   {
@@ -51,7 +59,9 @@
     "league": "Womens",
     "question": "By when do we need to submit the scorecard after a match?",
     "expectedRoute": "faq",
-    "expectedSectionNumbers": ["4"],
+    "expectedSectionNumbers": [
+      "4"
+    ],
     "notes": "Section verified against rule_chunks content (section 4, \"Players\", contains the scorecard/upload/Tuesday/11 PM deadline text); originally guessed as 1 at authoring time, which was wrong. NOTE: as of the 2026-09-19 eval run, the live API actually cites section 9 (\"Points\", unrelated) for this question — that's a separate app bug in Program.cs's citation fallback (falls back to the nearest retrieved chunk when the model's self-reported citedSectionNumbers doesn't match a retrieved chunk), not a test-data error. Expect this question to fail precision/recall until that's fixed."
   },
   {
@@ -59,7 +69,9 @@
     "league": "Youth",
     "question": "How many overs can one bowler bowl in the youth league?",
     "expectedRoute": "faq",
-    "expectedSectionNumbers": ["3"],
+    "expectedSectionNumbers": [
+      "3"
+    ],
     "notes": "Section verified against rule_chunks content (section 3, \"Bowling:\", opens with \"A bowler can bowl a maximum of 4 overs.\"); originally guessed as 7 at authoring time, which was wrong. NOTE: as of the 2026-09-19 eval run, the live API actually cites section 2 (\"Game\", which mentions \"4 overs\" only in an unrelated time-keeping context) — same Program.cs citation-fallback bug as womens-02. Expect this question to fail precision/recall until that's fixed."
   },
   {
@@ -67,7 +79,9 @@
     "league": "Youth",
     "question": "How many wides are allowed per over in Youth 10?",
     "expectedRoute": "faq",
-    "expectedSectionNumbers": ["3"],
+    "expectedSectionNumbers": [
+      "3"
+    ],
     "notes": "Section verified against rule_chunks content (section 3, \"Bowling:\", contains \"Youth 10 and Youth 13: A bowler can bowl a maximum of 5 wides in an over.\"); originally guessed as 8 at authoring time, which was wrong. NOTE: as of the 2026-09-19 eval run, the live API actually cites section 2 (\"Game\", unrelated) — same Program.cs citation-fallback bug as womens-02/youth-01. Expect this question to fail precision/recall until that's fixed."
   },
   {
@@ -82,7 +96,10 @@
     "league": "Youth",
     "question": "How much does a full equipment kit cost?",
     "expectedRoute": "faq",
-    "expectedSectionNumbers": ["FAQ-Fees", "15"],
+    "expectedSectionNumbers": [
+      "FAQ-Fees",
+      "15"
+    ],
     "notes": "Resolved 2026-09-19: the real figure ($200 kit cost) lives on ARCL's separate FAQ page (arcl.org/Pages/Content/FAQ.aspx), which Phase 1 ingestion never fetched. Added as a manually-authored chunk (section_number='FAQ-Fees', see ingest/Program.cs's --content-file mode) with a real embedding. The API now correctly answers from that chunk and also cites section 15 (\"Registration Fees and Equipment Cost\", the original rulebook stub) as supporting context — both are legitimate, so both are expected. There is no youth section '17'; that was a wrong guess at authoring time."
   },
   {
@@ -100,5 +117,277 @@
     "expectedRoute": "human_handoff",
     "expectedSectionNumbers": [],
     "notes": "Out-of-scope question. expectedRoute is still human_handoff either way, since Program.cs's FAQ branch now has two tiers above the base LowConfidenceCosineDistanceThreshold (0.35): a higher Arcl:OutOfScopeCosineDistanceThreshold (started at 0.55) gets a blunter \"that doesn't look like a rules question\" message instead of the vaguer \"not confident\" one, but only bestDistance decides which tier, not the question's actual topic. As measured 2026-09-22, this specific question's real bestDistance against the mens corpus was ~0.464 — below 0.55 — so it currently gets the \"not confident\" message, not the new out-of-scope one; other clearly-unrelated probes (gibberish text, a cookie recipe question) scored similarly (~0.44-0.47), suggesting 0.55 may be set too high to ever fire for this embedding model/corpus and is worth retuning lower. Either message still routes to human_handoff, so this doesn't affect route accuracy, but if the message-text wording ever gets checked here, know which tier to expect."
+  },
+  {
+    "id": "faq-01",
+    "league": "Mens",
+    "question": "I'm new to the area and want to play. How do I find a team?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-01"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content."
+  },
+  {
+    "id": "faq-02",
+    "league": "Mens",
+    "question": "Where do we pick up our hard tennis balls and kit for the new season?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-02"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content."
+  },
+  {
+    "id": "faq-03",
+    "league": "Womens",
+    "question": "How much does an extra can of tape balls cost?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-02"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: $10 per can (3 balls)."
+  },
+  {
+    "id": "faq-04",
+    "league": "Youth",
+    "question": "Can a player switch to another team halfway through the season?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-06"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: no — one team per league; can change for the next league."
+  },
+  {
+    "id": "faq-05",
+    "league": "Mens",
+    "question": "We never got a login for the ARCL website. How do we get one?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-07",
+      "FAQ-18"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Both genuinely answer it: FAQ-07 (no login id -> email the Registration team alias) and FAQ-18 (new-team credentials)."
+  },
+  {
+    "id": "faq-06",
+    "league": "Womens",
+    "question": "Where's the link to upload our scorecard on the website?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-08"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content."
+  },
+  {
+    "id": "faq-07",
+    "league": "Mens",
+    "question": "A player's name is spelled two different ways across our scorecards. How do we fix his stats?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-09"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: 'Update Player' or 'Merge Player' link after login."
+  },
+  {
+    "id": "faq-08",
+    "league": "Youth",
+    "question": "How can I get contact details for the other teams?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-10"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content."
+  },
+  {
+    "id": "faq-09",
+    "league": "Womens",
+    "question": "Where can I download a blank paper scoresheet?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-16"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content."
+  },
+  {
+    "id": "faq-10",
+    "league": "Mens",
+    "question": "Do we have to attend the orientation if we're a brand-new team?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-20"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: yes, mandatory for new and last-division teams."
+  },
+  {
+    "id": "faq-11",
+    "league": "Mens",
+    "question": "Why do new teams pay a $100 deposit, and do we get it back?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-19"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: because of past no-shows; refunded after the season if no penalties."
+  },
+  {
+    "id": "faq-12",
+    "league": "Womens",
+    "question": "Our registration status says 'Pending - Invalid team'. What went wrong?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-21"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: the team name entered in the Customer ID field during payment was invalid."
+  },
+  {
+    "id": "faq-13",
+    "league": "Mens",
+    "question": "We sat out last season. Which division do we come back into?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-23"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: treated as a new team, joins the last division."
+  },
+  {
+    "id": "faq-14",
+    "league": "Womens",
+    "question": "What's the registration fee for a women's team?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-Fees"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: $600 (kit $200). FAQ-18a (the FAQ page's all-leagues fee list) is also a legitimate source."
+  },
+  {
+    "id": "faq-15",
+    "league": "Mens",
+    "question": "How much does the kit cost for a men's team?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-Fees"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: $250. FAQ-18a also lists it. A wrong answer here quoting the women's/youth $200 would be a league-wall failure."
+  },
+  {
+    "id": "faq-16",
+    "league": "Youth",
+    "question": "Do our players need to sign up on CricClubs again every season?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-27"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: no, one time only; teams and players carry over."
+  },
+  {
+    "id": "faq-17",
+    "league": "Mens",
+    "question": "We already score on the CricClubs app. Do we still have to upload the scorecard to arcl.org?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-28"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: yes, the two systems aren't integrated."
+  },
+  {
+    "id": "faq-18",
+    "league": "Womens",
+    "question": "I have a CricClubs profile from NWCL. Can I use it for ARCL?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-35"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: yes, email the scorecard alias with cc id and team name."
+  },
+  {
+    "id": "faq-19",
+    "league": "Mens",
+    "question": "How do we hand live scoring over to the other team's phone after the first innings?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-32"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content."
+  },
+  {
+    "id": "faq-20",
+    "league": "Youth",
+    "question": "My ARCL website username doesn't work on CricClubs. Why not?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-37"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: separate systems; register separately on CricClubs."
+  },
+  {
+    "id": "faq-21",
+    "league": "Mens",
+    "question": "I accidentally created two CricClubs profiles. Can they be merged?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-34"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content."
+  },
+  {
+    "id": "faq-22",
+    "league": "Womens",
+    "question": "A player we want is still listed on another team in CricClubs. How do we get her onto ours?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-38",
+      "FAQ-29"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Both say the same thing: ask that team's captain or the scorecard alias to remove her first."
+  },
+  {
+    "id": "faq-23",
+    "league": "Mens",
+    "question": "How do we change our team's name?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-40"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content."
+  },
+  {
+    "id": "faq-24",
+    "league": "Mens",
+    "question": "It's been over a week and my CricClubs profile still isn't approved. What should I do?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-33"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content."
+  },
+  {
+    "id": "faq-25",
+    "league": "Youth",
+    "question": "Where can I see ARCL's tax returns?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-13"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content."
+  },
+  {
+    "id": "faq-26",
+    "league": "Mens",
+    "question": "Is there a limit on how many teams can register for the men's league?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-17"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content. Answer: capped at 192 teams; new/drop-out teams admitted by registration time."
+  },
+  {
+    "id": "faq-27",
+    "league": "Womens",
+    "question": "How do I download the ARCL CricClubs app?",
+    "expectedRoute": "faq",
+    "expectedSectionNumbers": [
+      "FAQ-41"
+    ],
+    "notes": "From the arcl.org FAQ page (2026-11-16). Question deliberately reworded from the FAQ heading so it tests retrieval, not string matching. Expected section verified against rule_chunks section titles/content."
   }
 ]

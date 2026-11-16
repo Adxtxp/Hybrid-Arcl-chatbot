@@ -4,9 +4,10 @@
 // answer's retrieval precision/recall (where a question has an expected rule section) and route
 // correctness (FAQ vs decision tree vs human handoff). Writes one CSV per run to results/.
 //
-// This ships with 14 starter questions built from the real rule text pulled in Phase 1 — the
-// blueprint's Phase 4 goal is 50+ REAL historical ARCL dispute questions. Treat this file as the
-// harness and format to extend, not as the finished evaluation set. The "correctness" column in
+// test-questions.json holds the 13 original rule questions plus 27 FAQ-page questions (faq-*,
+// added 2026-11-16). The blueprint's goal is 50+ including REAL historical ARCL dispute questions
+// — the FAQ set covers website/registration/app topics well but not match disputes, so the next
+// additions should come from real complaints and the admin review queue. The "correctness" column in
 // the output CSV is intentionally left blank for a human to fill in per the blueprint's rubric
 // (correct / partially correct / wrong / refused-appropriately) — an LLM grading its own sibling
 // LLM's answers is not a substitute for that human judgment call, especially for a
@@ -65,7 +66,8 @@ internal static class Program
             ?? throw new InvalidOperationException("No test questions loaded.");
 
         Console.WriteLine($"Running {questions.Count} questions against {apiBase} ...");
-        Console.WriteLine("NOTE: this is a 14-question starter set. The blueprint's Phase 4 goal is 50+ real historical dispute questions — expand test-questions.json before treating these numbers as a real accuracy signal.\n");
+        if (questions.Count < 50)
+            Console.WriteLine($"NOTE: {questions.Count} questions — the goal is 50+, including real historical dispute questions. Keep expanding test-questions.json.\n");
 
         using var http = new HttpClient { BaseAddress = new Uri(apiBase) };
         var results = new List<EvalResult>();
