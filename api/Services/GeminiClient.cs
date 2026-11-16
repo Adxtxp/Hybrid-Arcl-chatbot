@@ -73,8 +73,7 @@ public sealed class GeminiClient
             outputDimensionality = _embeddingDimensions
         };
 
-        using var request = BuildRequest($"{BaseUrl}/{_embeddingModel}:embedContent", payload);
-        using var resp = await _http.SendAsync(request, ct);
+        using var resp = await SendWithRetryAsync($"{BaseUrl}/{_embeddingModel}:embedContent", payload, HttpCompletionOption.ResponseContentRead, ct);
         await EnsureSuccessAsync(resp, ct);
 
         using var stream = await resp.Content.ReadAsStreamAsync(ct);
@@ -111,8 +110,7 @@ public sealed class GeminiClient
             generationConfig = new { temperature = regenerate ? 0.8 : 0.2 }
         };
 
-        using var request = BuildRequest($"{BaseUrl}/{_chatModel}:streamGenerateContent?alt=sse", payload);
-        using var resp = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        using var resp = await SendWithRetryAsync($"{BaseUrl}/{_chatModel}:streamGenerateContent?alt=sse", payload, HttpCompletionOption.ResponseHeadersRead, ct);
         await EnsureSuccessAsync(resp, ct);
 
         using var stream = await resp.Content.ReadAsStreamAsync(ct);
@@ -273,6 +271,32 @@ public sealed class GeminiClient
         }
 
         return (text, usage);
+    }
+
+    // Gemini answers 429 (rate limit) or 503 (overloaded) during short bursts — seen in practice when
+    // ~40 questions arrived back to back. Waiting a moment and retrying almost always succeeds, so
+    // do that up to MaxAttempts times before letting the visitor see an error. Retrying is safe:
+    // this only looks at the status code, before any answer text has been read or streamed onward.
+    private const int MaxAttempts = 3;
+    private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromSeconds(10);
+
+    private async Task<HttpResponseMessage> SendWithRetryAsync(
+        string url, object payload, HttpCompletionOption completion, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            using var request = BuildRequest(url, payload); // a request message can only be sent once
+            var resp = await _http.SendAsync(request, completion, ct);
+            if (resp.StatusCode is not (System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.ServiceUnavailable)
+                || attempt == MaxAttempts)
+                return resp;
+
+            // Honor Retry-After when Gemini sends one; otherwise back off 2s, then 4s.
+            var delay = resp.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(2 * attempt);
+            if (delay > MaxRetryDelay) delay = MaxRetryDelay;
+            resp.Dispose();
+            await Task.Delay(delay, ct);
+        }
     }
 
     private HttpRequestMessage BuildRequest(string url, object payload)
