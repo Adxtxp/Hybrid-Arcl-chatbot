@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/api/">
+    <Project Path="api/ArclChatbot.Api.csproj" />
+  </Folder>
+  <Folder Name="/eval/">
+    <Project Path="eval/EvalRunner.csproj" />
+  </Folder>
+  <Folder Name="/ingest/">
+    <Project Path="ingest/Ingest.csproj" />
+  </Folder>
+  <Folder Name="/shared/">
+    <Project Path="shared/Arcl.Ingestion/Arcl.Ingestion.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Arcl.Api.Tests/Arcl.Api.Tests.csproj" />
+  </Folder>
+</Solution>

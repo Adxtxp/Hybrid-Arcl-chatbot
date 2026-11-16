@@ -4,7 +4,12 @@ namespace Arcl.Api.Services;
 
 public enum IntentRoute { Faq, DecisionTree, Ambiguous, TeamRanking }
 
-public sealed record IntentResult(IntentRoute Route, string? DecisionTreeTopic);
+/// <param name="RootAnswer">
+/// The root node's option the message already answers, if any — e.g. "Yes" for "Was the match
+/// stopped early due to weather?" when the visitor just said "our match was stopped by rain".
+/// DecisionTreeService skips straight past the root so the bot doesn't ask what it was just told.
+/// </param>
+public sealed record IntentResult(IntentRoute Route, string? DecisionTreeTopic, string? RootAnswer = null);
 
 /// <summary>
 /// Deterministic-first classifier: a free keyword/regex pass catches the known decision-tree
@@ -44,6 +49,17 @@ public sealed class IntentClassifier
     private static bool IsBadWeatherQuestion(string message) =>
         BadWeatherStrong.IsMatch(message) || (WeatherWord.IsMatch(message) && MatchContext.IsMatch(message));
 
+    // The weather tree's root asks "Was the match stopped early due to weather?". A message that
+    // names both the weather and the stoppage has already answered that. "Abandoned" alone
+    // doesn't count (could be a no-show), nor does "what if it rains?" (nothing stopped yet).
+    private static readonly Regex WeatherOut = new(@"\b(rain(ed)?[\s-]?out|wash(ed)?[\s-]?out)\b", RegexOptions.IgnoreCase);
+    private static readonly Regex Stoppage = new(
+        @"\b(stop(ped|page|s)?|abandon\w*|called off|halt(ed)?|interrupt(ed|ion)?|cut short|suspend(ed)?|(could ?n'?o?t|did ?n'?o?t) finish)\b",
+        RegexOptions.IgnoreCase);
+
+    internal static bool StatesWeatherStoppage(string message) =>
+        WeatherOut.IsMatch(message) || (WeatherWord.IsMatch(message) && Stoppage.IsMatch(message));
+
     // Signals a message might need a human regardless of topic — surfaced as Ambiguous so the
     // caller can offer the escape hatch rather than force a route.
     private static readonly Regex AmbiguousSignal = new(
@@ -66,7 +82,8 @@ public sealed class IntentClassifier
         foreach (var (topic, matches) in DecisionTreeTopics)
         {
             if (matches(message))
-                return new IntentResult(IntentRoute.DecisionTree, topic);
+                return new IntentResult(IntentRoute.DecisionTree, topic,
+                    topic == "bad_weather" && StatesWeatherStoppage(message) ? "Yes" : null);
         }
 
         if (AmbiguousSignal.IsMatch(message) && message.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length < 6)

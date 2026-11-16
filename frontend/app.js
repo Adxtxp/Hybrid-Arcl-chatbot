@@ -4,7 +4,8 @@
 // change API_BASE below if the frontend is hosted separately.
 //
 // state.sessionId/state.league are mirrored to localStorage so a page refresh resumes the same
-// session instead of dropping back to the league picker. This only restores which session/league
+// session instead of dropping back to the league picker (standalone page only; the website widget
+// always starts at the picker — see the bottom of this file). This only restores which session/league
 // is active — the visible message history above it is not persisted (session state and the
 // conversation memory both live server-side, so follow-up questions still work after a refresh;
 // only the chat bubbles on screen reset).
@@ -21,7 +22,8 @@ const API_BASE = ""; // same-origin: this file is served from the API's own wwwr
 // widget rather than as its own standalone page — the widget shell already shows a title/close
 // button, so this page's own duplicate title bar (but not its NRR/Change League/Support actions,
 // which are only reachable from here) is hidden in that case. See styles.css's .embedded rule.
-if (new URLSearchParams(location.search).get("embed") === "1") {
+const EMBEDDED = new URLSearchParams(location.search).get("embed") === "1";
+if (EMBEDDED) {
   document.body.classList.add("embedded");
 }
 
@@ -766,5 +768,8 @@ function computeNrr() {
 // evaluation, used to abort the rest of this file — silently skipping every addEventListener
 // below it. Confirmed via a real bug report: league buttons, NRR, and chat all appeared
 // completely unresponsive for a returning user, working fine for a fresh one.
-const saved = loadSavedSession();
+// In the website widget, every new page view starts at the league picker instead: a visitor
+// browsing arcl.org may be asking about a different league than last time (a parent of a Youth
+// player who also plays Men's), and a silently-resumed league would answer from the wrong rulebook.
+const saved = EMBEDDED ? null : loadSavedSession();
 if (saved) resumeSession(saved.sessionId, saved.league);

@@ -108,7 +108,10 @@ public sealed class ConversationLogger
     /// <summary>The session's last few exchanges, whatever route they took, oldest first — the
     /// conversation included in a contact-form email so the admin sees what the visitor already
     /// asked and what the bot told them, without opening the admin page.</summary>
-    public async Task<IReadOnlyList<(string Question, string? Answer)>> GetTranscriptAsync(Guid sessionId, int maxTurns, CancellationToken ct = default)
+    /// <param name="beforeLogId">Only turns logged before this one — the handoff request's own row,
+    /// so a retried email shows the conversation as it was, not what happened after.</param>
+    public async Task<IReadOnlyList<(string Question, string? Answer)>> GetTranscriptAsync(Guid sessionId, int maxTurns,
+        long beforeLogId, CancellationToken ct = default)
     {
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync(ct);
@@ -116,11 +119,12 @@ public sealed class ConversationLogger
             """
             SELECT TOP (@maxTurns) query, response_text
             FROM dbo.conversation_log
-            WHERE session_id = @sessionId
+            WHERE session_id = @sessionId AND log_id < @beforeLogId
             ORDER BY log_id DESC
             """, conn);
         cmd.Parameters.AddWithValue("@sessionId", sessionId);
         cmd.Parameters.AddWithValue("@maxTurns", maxTurns);
+        cmd.Parameters.AddWithValue("@beforeLogId", beforeLogId);
 
         var turns = new List<(string, string?)>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -131,8 +135,9 @@ public sealed class ConversationLogger
     }
 
     /// <summary>The contact-admin form submission (sql/008_phase2_hardening.sql), linked to the
-    /// conversation_log row for the same request. consentText is the exact wording shown.</summary>
-    public async Task LogHandoffRequestAsync(
+    /// conversation_log row for the same request. consentText is the exact wording shown.
+    /// Returns the new request_id.</summary>
+    public async Task<long> LogHandoffRequestAsync(
         long logId, Guid sessionId, string? name, string email, string message, string consentText, CancellationToken ct = default)
     {
         await using var conn = new SqlConnection(_connectionString);
@@ -142,6 +147,7 @@ public sealed class ConversationLogger
             """
             INSERT INTO dbo.handoff_requests
                 (log_id, session_id, contact_name, contact_email, message, consent_text, consent_given_at)
+            OUTPUT inserted.request_id
             VALUES (@logId, @sessionId, @name, @email, @message, @consentText, SYSUTCDATETIME())
             """, conn);
         cmd.Parameters.AddWithValue("@logId", logId);
@@ -150,7 +156,7 @@ public sealed class ConversationLogger
         cmd.Parameters.AddWithValue("@email", email);
         cmd.Parameters.AddWithValue("@message", message);
         cmd.Parameters.AddWithValue("@consentText", consentText);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return (long)(await cmd.ExecuteScalarAsync(ct))!;
     }
 
     public async Task RecordFeedbackAsync(long logId, bool thumbsUp, CancellationToken ct = default)

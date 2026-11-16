@@ -29,8 +29,13 @@ public sealed class DecisionTreeService
             ?? throw new InvalidOperationException("Set Arcl:SupportContact in appsettings.json.");
     }
 
-    /// <summary>Starts a tree for the given topic and league, and records it as the session's current node.</summary>
-    public async Task<DecisionTreeStepResult?> StartAsync(Guid sessionId, League league, string topic, CancellationToken ct = default)
+    /// <summary>
+    /// Starts a tree for the given topic and league, and records it as the session's current node.
+    /// When <paramref name="rootAnswer"/> names a root option that leads to another node (the
+    /// visitor's message already answered the root question), starts at that node instead.
+    /// </summary>
+    public async Task<DecisionTreeStepResult?> StartAsync(Guid sessionId, League league, string topic,
+        string? rootAnswer = null, CancellationToken ct = default)
     {
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync(ct);
@@ -38,6 +43,14 @@ public sealed class DecisionTreeService
         var root = await LoadNodeByTopicAsync(conn, league, topic, ct);
         if (root is null)
             return null; // no tree built for this topic yet — caller falls back to human handoff
+
+        var answered = rootAnswer is null ? null
+            : root.Options.FirstOrDefault(o => string.Equals(o.Label, rootAnswer, StringComparison.OrdinalIgnoreCase));
+        if (answered?.NextNodeId is Guid nextId && await LoadNodeByIdAsync(conn, nextId, ct) is { } next)
+        {
+            await SetSessionNodeAsync(conn, sessionId, next.NodeId, ct);
+            return new DecisionTreeStepResult(IsTerminal: false, Message: next.QuestionText, Options: next.Options, Citation: null);
+        }
 
         await SetSessionNodeAsync(conn, sessionId, root.NodeId, ct);
         return new DecisionTreeStepResult(IsTerminal: false, Message: root.QuestionText, Options: root.Options, Citation: null);
