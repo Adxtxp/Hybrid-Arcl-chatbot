@@ -1,4 +1,4 @@
-// ARCL Hybrid Chatbot — Phase 1 ingestion tool.
+﻿// ARCL Hybrid Chatbot — Phase 1 ingestion tool.
 //
 // Fetches one rulebook page (Men's / Women's / Youth), splits it into chunks by
 // section header, and upserts those chunks into dbo.rule_chunks (see ../sql/001_schema.sql).
@@ -41,7 +41,12 @@ namespace Arcl.Ingest;
 // (e.g. "Neutral Umpire" is both a heading AND a phrase used constantly in running rule text).
 // Only applies to the real body-matching pass, never the probe pass that locates the table of
 // contents (see MatchAnchors) — the probe pass needs the FIRST/TOC occurrence, not a later one.
-internal sealed record SectionAnchor(string SectionNumber, string SectionTitle, int SkipOccurrences = 0);
+//
+// WholeLine: only accept a match that is the entire line on its own. For one-word headings like
+// "Players", "Points" and "Runs" that also start ordinary sentences right after a line wrap
+// ("Minimum 4\nplayers are required...") — skipping a fixed count of those is fragile, but the
+// real heading is always alone on its line while the prose mentions never are.
+internal sealed record SectionAnchor(string SectionNumber, string SectionTitle, int SkipOccurrences = 0, bool WholeLine = false);
 
 internal sealed record ChunkResult(
     string League,
@@ -117,6 +122,15 @@ internal static class Program
             }
         }
 
+        // --dry-run: stop after chunking (the [diag] previews above are the whole point) — no
+        // embedding calls, no DB writes. Use this to iterate on SectionAnchors/*.json safely.
+        if (opts.DryRun)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"Dry run — {chunks.Count} chunk(s) built, nothing embedded or written.");
+            return notFound.Count > 0 ? 2 : 0;
+        }
+
         var geminiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
         var embedder = geminiKey is null ? null : new GeminiEmbedder(geminiKey);
         if (embedder is null)
@@ -176,7 +190,8 @@ internal static class Program
 
     private sealed record Options(
         string League, string Url, DateOnly EffectiveStart,
-        string? AnchorsPath, string? ManualContentFile, string? SectionNumber, string? SectionTitle);
+        string? AnchorsPath, string? ManualContentFile, string? SectionNumber, string? SectionTitle,
+        bool DryRun);
 
     private static Options? ParseArgs(string[] args)
     {
@@ -226,14 +241,20 @@ internal static class Program
             return null;
         }
 
-        return new Options(league, url, effectiveStart, anchorsPath, manualContentFile, sectionNumber, sectionTitle);
+        // Flag, not a key/value pair, so it's checked outside the loop above (which only looks at
+        // args that have a value after them — a trailing --dry-run would never be seen there).
+        var dryRun = args.Contains("--dry-run");
+
+        return new Options(league, url, effectiveStart, anchorsPath, manualContentFile, sectionNumber, sectionTitle, dryRun);
     }
 
     private static void PrintUsage()
     {
         Console.WriteLine("""
             Usage:
-              dotnet run -- --league <mens|womens|youth> --url <rulebook url> --anchors <path to anchors json> --effective-start <yyyy-MM-dd>
+              dotnet run -- --league <mens|womens|youth> --url <rulebook url> --anchors <path to anchors json> --effective-start <yyyy-MM-dd> [--dry-run]
+
+            --dry-run   chunk and print previews only — no embeddings, no DB writes
 
             Manual mode (single pre-written chunk, e.g. content from a page this tool doesn't chunk):
               dotnet run -- --league <mens|womens|youth> --url <source url, for citation only> --effective-start <yyyy-MM-dd> \
@@ -335,7 +356,7 @@ internal static class Program
         // of an actual non-breaking-space character — which silently breaks matching for exactly
         // the sections built from that pasted content. Decoding again is harmless for text that's
         // already clean; it only matters for the double-encoded leftovers.
-        var text = NormalizeWhitespace(System.Net.WebUtility.HtmlDecode(doc.DocumentNode.InnerText));
+        var text = RepairReplacementChars(NormalizeWhitespace(System.Net.WebUtility.HtmlDecode(doc.DocumentNode.InnerText)));
 
         // Dump the full extracted plain text every run. When most anchors miss (as opposed to
         // one or two wording tweaks), guessing at titles one diagnostic gap at a time doesn't
@@ -458,7 +479,7 @@ internal static class Program
             // true) — during the probe pass that locates the TOC, every anchor's FIRST occurrence
             // is exactly what we want (that's the TOC line itself).
             var skip = applySkip ? anchor.SkipOccurrences : 0;
-            var (idx, matchedLength) = FindTitle(text, anchor.SectionTitle, searchFrom, skip);
+            var (idx, matchedLength) = FindTitle(text, anchor.SectionTitle, searchFrom, skip, anchor.WholeLine);
             if (idx < 0)
             {
                 notFound.Add(anchor);
@@ -488,16 +509,16 @@ internal static class Program
     // End time rule" but the real heading is just "Bad Weather", and "In Case of a Tie in
     // Playoffs (Quarter Finals, Semis or Finals)" loses its parenthetical in the body. Trading a
     // little title precision for not silently losing the whole section is the right trade here.
-    private static (int Idx, int MatchedLength) FindTitle(string text, string title, int searchFrom, int skip = 0)
+    private static (int Idx, int MatchedLength) FindTitle(string text, string title, int searchFrom, int skip = 0, bool wholeLine = false)
     {
-        var idx = FindTitleRegex(text, title, searchFrom, skip);
+        var idx = FindTitleRegex(text, title, searchFrom, skip, wholeLine);
         if (idx.Idx >= 0) return idx;
 
         var cut = title.IndexOfAny(new[] { '/', '(', ':' });
         if (cut > 3) // keep at least a few characters — don't fall back to something too short/generic
         {
             var shortTitle = title[..cut].TrimEnd();
-            idx = FindTitleRegex(text, shortTitle, searchFrom, skip);
+            idx = FindTitleRegex(text, shortTitle, searchFrom, skip, wholeLine);
             if (idx.Idx >= 0) return idx;
         }
 
@@ -521,7 +542,7 @@ internal static class Program
     // exact words also show up inline in ordinary prose earlier in the document (see
     // SectionAnchor.SkipOccurrences). Each rejected earlier occurrence still advances the search
     // position, exactly like a real accepted match would, so this stays a single forward pass.
-    private static (int Idx, int MatchedLength) FindTitleRegex(string text, string title, int searchFrom, int skip = 0)
+    private static (int Idx, int MatchedLength) FindTitleRegex(string text, string title, int searchFrom, int skip = 0, bool wholeLine = false)
     {
         if (searchFrom >= text.Length || title.Length == 0) return (-1, 0);
 
@@ -531,6 +552,9 @@ internal static class Program
         var pattern = string.Join(@"\s+", words.Select(Regex.Escape));
         if (char.IsLetterOrDigit(title[0])) pattern = @"\b" + pattern;
         if (char.IsLetterOrDigit(title[^1])) pattern += @"\b";
+        // See SectionAnchor.WholeLine. Lookarounds rather than ^/$ so the match itself (and so
+        // the header-line/content split in MatchAnchors) is unchanged — only which occurrence wins.
+        if (wholeLine) pattern = @"(?<=^|\n)[ \t]*" + pattern + @"(?=[ \t\r]*(?:\n|$))";
 
         var pos = searchFrom;
         for (var i = 0; i <= skip; i++)
@@ -585,6 +609,21 @@ internal static class Program
 
         return lastTocIndex >= 0 ? matches[lastTocIndex].HeaderLineEnd : 0;
     }
+
+    // The FAQ page serves literal U+FFFD replacement characters where its smart quotes used to be
+    // (decoded here as the 3-char "ï¿½"), which then show up in stored titles and citation links.
+    // The original character is gone, so guess from context: between letters it was almost always
+    // an apostrophe ("don�t"), elsewhere a quote mark ("click �Update Player�"). Same rule as the
+    // API's PromptSanitizer, which also repairs any rows ingested before this existed.
+    private static string RepairReplacementChars(string s) =>
+        Regex.Replace(s, "(ï¿½|�)+", m =>
+        {
+            var before = m.Index > 0 ? s[m.Index - 1] : ' ';
+            var after = m.Index + m.Length < s.Length ? s[m.Index + m.Length] : ' ';
+            if (char.IsLetter(before) && char.IsLetter(after)) return "'";
+            if ((m.Index == 0 || before == '\n') && char.IsWhiteSpace(after)) return "·"; // a list bullet at line start
+            return "\"";
+        });
 
     private static string NormalizeWhitespace(string s)
     {
@@ -696,7 +735,7 @@ internal sealed class GeminiEmbedder
 
     public async Task<float[]> EmbedAsync(string text)
     {
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{Model}:embedContent?key={_apiKey}";
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{Model}:embedContent";
         var payload = new
         {
             model = $"models/{Model}",
@@ -704,7 +743,11 @@ internal sealed class GeminiEmbedder
             outputDimensionality = OutputDimensionality
         };
 
-        using var resp = await _http.PostAsJsonAsync(url, payload);
+        // Key in a header, not the query string — same as the API's GeminiClient, so it can't end
+        // up in any log or trace that records request URLs.
+        using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(payload) };
+        request.Headers.Add("x-goog-api-key", _apiKey);
+        using var resp = await _http.SendAsync(request);
         if (!resp.IsSuccessStatusCode)
         {
             // EnsureSuccessStatusCode() throws without ever reading the response body, which is

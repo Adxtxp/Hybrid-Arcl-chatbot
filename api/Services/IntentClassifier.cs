@@ -22,12 +22,27 @@ public sealed class IntentClassifier
 {
     // Order matters: first matching topic wins. Keep patterns narrow — a false positive here
     // routes a normal FAQ question into a rigid decision tree instead of just answering it.
-    private static readonly (string Topic, Regex Pattern)[] DecisionTreeTopics =
+    private static readonly (string Topic, Func<string, bool> Matches)[] DecisionTreeTopics =
     {
-        ("bad_weather", new Regex(@"\b(rain\w*|weather\w*|drizzl\w*|wash(ed)?[\s-]?out|abandon(ed|ment)?|stopped? (the )?(game|match))\b", RegexOptions.IgnoreCase)),
-        ("no_show", new Regex(@"\b(no[\s-]?show|forfeit(ed)?|didn'?t (show|turn) up|team (never|didn'?t) (show|arrive))\b", RegexOptions.IgnoreCase)),
-        ("tie_breaking", new Regex(@"\b(tie[\s-]?break(er|ing)?|equal points|same points|playoff tie)\b", RegexOptions.IgnoreCase)),
+        ("bad_weather", IsBadWeatherQuestion),
+        ("no_show", new Regex(@"\b(no[\s-]?show|forfeit(ed)?|didn'?t (show|turn) up|team (never|didn'?t) (show|arrive))\b", RegexOptions.IgnoreCase).IsMatch),
+        ("tie_breaking", new Regex(@"\b(tie[\s-]?break(er|ing)?|equal points|same points|playoff tie)\b", RegexOptions.IgnoreCase).IsMatch),
     };
+
+    // Phrases that are about a disrupted match on their own ("rained out", "abandoned").
+    private static readonly Regex BadWeatherStrong = new(
+        @"\b(rain(ed)?[\s-]?out|wash(ed)?[\s-]?out|abandon(ed|ment)?|stopped? (the )?(game|match|play))\b", RegexOptions.IgnoreCase);
+
+    // A bare weather word only counts alongside match context — "what will the weather be in
+    // Seattle tomorrow?" (a real false positive from the 2026-11-16 calibration run) is a
+    // forecast question, not a rain-stopped-play dispute.
+    private static readonly Regex WeatherWord = new(@"\b(rain\w*|weather\w*|drizzl\w*|storm\w*|thunder\w*|lightning)\b", RegexOptions.IgnoreCase);
+    private static readonly Regex MatchContext = new(
+        @"\b(match(es)?|game|games|play(ed|ing)?|innings?|overs?|umpires?|result|points|called off|stop(ped)?|finish(ed)?|complete[d]?|abandon\w*|resched\w*)\b",
+        RegexOptions.IgnoreCase);
+
+    private static bool IsBadWeatherQuestion(string message) =>
+        BadWeatherStrong.IsMatch(message) || (WeatherWord.IsMatch(message) && MatchContext.IsMatch(message));
 
     // Signals a message might need a human regardless of topic — surfaced as Ambiguous so the
     // caller can offer the escape hatch rather than force a route.
@@ -48,9 +63,9 @@ public sealed class IntentClassifier
         if (TeamRankingSignal.IsMatch(message))
             return new IntentResult(IntentRoute.TeamRanking, null);
 
-        foreach (var (topic, pattern) in DecisionTreeTopics)
+        foreach (var (topic, matches) in DecisionTreeTopics)
         {
-            if (pattern.IsMatch(message))
+            if (matches(message))
                 return new IntentResult(IntentRoute.DecisionTree, topic);
         }
 

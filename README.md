@@ -67,6 +67,14 @@ sqlcmd -S <server> -d arcl -i sql/006_team_ranking.sql
 # 3d. Add prompt/completion token columns (one-time, safe to skip if already applied)
 sqlcmd -S <server> -d arcl -i sql/007_token_tracking.sql
 
+# 3e. Phase 2: best_distance/confidence_tier logging + the contact-form table (one-time, re-runnable).
+#     -I is required (QUOTED_IDENTIFIER ON). The API now writes these columns on every turn.
+sqlcmd -S <server> -d arcl -I -i sql/008_phase2_hardening.sql
+
+# 3f. Download the cross-encoder re-ranker (~90 MB, pinned + hash-checked, gitignored).
+#     Without it the API still runs, just without re-ranking (logged at startup).
+powershell -File scripts/download-reranker.ps1
+
 # 4. Copy the frontend into the API's wwwroot (see "Serving everything from one origin" below —
 #    api/wwwroot/ is what's actually served; frontend/ is the source you edit)
 cp frontend/*.html frontend/*.js frontend/*.css api/wwwroot/
@@ -357,6 +365,104 @@ threshold alerting (error rate / cost spikes) — both still need a scheduler + 
 channel wired up (Windows Task Scheduler + a small console app reusing `eval/`'s pattern, per the
 plan discussed, rather than assuming SQL Server Agent + Database Mail is configured on a dev/course
 setup), which hasn't been built yet.
+
+## Phase 1 completion + Phase 2 hardening
+
+What changed, where, and what to tune. Everything below is covered by `tests/Arcl.Api.Tests`
+(`dotnet test tests/Arcl.Api.Tests`) except where it needs the live DB + Gemini.
+
+**Chunking fixes (ingest).** Men's §5 "Players", §29 "Points" and §49 "Runs" were matching the
+same word at the start of an ordinary sentence ("Minimum 4 / players are required…"), which
+truncated §4, §28 and §48 (Caught Out was 4 characters). Fixed with a new `"wholeLine": true`
+anchor option (match only when the heading is alone on its line) instead of a fragile
+`skipOccurrences` count. §20 and §38 were missing from the DB only because men's hadn't been
+re-ingested since the double-decode fix. The new `--dry-run` flag prints the chunk previews and
+exits without embedding or writing. Use it whenever you touch `SectionAnchors/*.json`. Ingest
+also now repairs the FAQ page's `ï¿½` replacement characters.
+
+**Hybrid search = vector + real BM25.** `RetrievalService.cs`: exact `VECTOR_DISTANCE` for every
+chunk in the league, Okapi BM25 (`Bm25Index.cs`, in memory, so no SQL Server Full-Text needed),
+Reciprocal Rank Fusion of the two, then cross-encoder re-ranking (`CrossEncoderReranker.cs`,
+ms-marco-MiniLM-L6-v2 via ONNX Runtime, local CPU). The BM25 snapshot refreshes every
+`Arcl:CorpusCacheMinutes` (10), so a re-ingest shows up without a restart.
+
+**Streaming.** `POST /api/chat/stream` (Server-Sent Events: `sources`, `delta`, `replace`,
+`done`, documented on `ChatEvent` in `ChatOrchestrator.cs`). `POST /api/chat` still returns one
+JSON object (the eval uses it); both run the same `ChatOrchestrator`. The answer prompt is now
+plain text with a `CONFIDENT: yes|no` first line instead of a JSON schema, because JSON can't be
+shown until it's complete.
+
+**Conversational memory.** The last `Arcl:ConversationMemoryTurns` (4) answered turns are read
+back from `conversation_log` and given to the model. When a message looks like a follow-up
+("what about a wide?"), the previous question is prepended for retrieval too.
+
+**Graduated confidence gate** on the closest chunk's cosine distance (now logged per turn as
+`conversation_log.best_distance` + `confidence_tier`):
+
+| distance | tier | what the visitor sees |
+|---|---|---|
+| ≤ `HighConfidence…` (0.33) | high | the answer |
+| ≤ `MediumConfidence…` (0.38) | medium | the answer + a "double-check this" caveat |
+| ≤ `OutOfScope…` (0.40) | low | no answer: related sections + "Contact a league admin" |
+| > 0.40 | out_of_scope | "that's not an ARCL question" |
+
+The model can still downgrade to low with `CONFIDENT: no`. Low and out-of-scope skip the Gemini
+call entirely (the old code paid for an answer between 0.35 and 0.55 and then threw it away).
+Calibrated 2026-11-16 from the eval set + 20 probe questions: answerable 0.11–0.32, uncovered
+but on-topic 0.24–0.36 (the model said "not confident" on all of them), off-topic 0.42–0.47.
+The off-topic margin is thin, so keep re-checking against real traffic:
+`SELECT confidence_tier, user_feedback, best_distance, query FROM conversation_log WHERE best_distance IS NOT NULL ORDER BY best_distance`.
+
+**UI.** Typing indicator (animated dots), streamed text, distinct styles and labels per reply kind
+(answer / low-confidence / out-of-scope / error-with-retry / handoff / request-sent), per-claim
+inline citations (`[§4]` becomes a link chip after the sentence) plus the bottom source list,
+↻ Regenerate and ✎ Rephrase on every answer, "you might also want to know" follow-ups, and starter
+prompts per league from `GET /api/suggestions` (a seasonal question, this league's most-asked
+sections, and a curated set, never other visitors' raw questions). Screen readers get one
+announcement per finished reply through a polite live region (`#sr-announcer`). The transcript
+itself is not live, so streaming doesn't read out every fragment.
+
+**Contact-admin form.** "Contact Human Support" (and the button on low-confidence/handoff
+replies) opens a form: related sections first, then name/email/message and a PDPA consent
+checkbox. The consent wording comes from `Arcl:HandoffConsentText` (blank = the built-in default)
+via `GET /api/config/public`, and the exact text is stored with each submission in
+`handoff_requests`. Submissions show "Reply to …" in the admin review queue.
+
+**Prompt-injection + output filtering.** `PromptSanitizer.cs` cleans every chunk, the question,
+and the history before they reach the prompt: it strips our delimiters and `[§` syntax and
+invisible/bidi characters, folds look-alike letters, and neutralizes "ignore previous
+instructions"-style phrasings. Untrusted text only appears inside labeled blocks that the prompt
+calls data. `OutputFilter.cs` then checks the answer: links only to `Arcl:OutputFilter:AllowedHosts`
+or URLs in the rule text, emails/phone numbers only if they're ARCL's or appear in the rule text,
+and a prompt-leak check that withholds the whole answer.
+
+**Pre-deploy gate.** `powershell -File scripts/predeploy.ps1` builds, runs the unit tests, starts the
+API, runs the golden set with `--min-route-accuracy 0.9 --min-recall 0.7`, and exits 1 on any
+failure. `.github/workflows/ci.yml` runs build + unit tests + a vulnerable-package check on every
+push (the golden set needs the DB and a Gemini key, so it isn't in CI).
+
+## Production hardening
+
+In code (`api/Program.cs`, `Arcl:Security:*`):
+- HTTPS redirect + HSTS outside Development (`RequireHttps`). No-op on plain `http://localhost`.
+- `TrustForwardedHeaders: true` **only** behind a reverse proxy (App Service, IIS, nginx). It lets
+  the rate limiter see real client IPs. Leave it false otherwise, or clients can spoof their IP.
+- CORS is off (same-origin only) unless `AllowedOrigins` lists a separately hosted frontend.
+- CSP (`script-src 'self'`, `frame-ancestors` = `FrameAncestors`, defaults to arcl.org for the
+  widget), `nosniff`, Referrer-Policy, Permissions-Policy.
+- Admin key compared in constant time; chat messages capped at `Arcl:MaxMessageLength` (1000).
+- Gemini key sent in the `x-goog-api-key` header, never in the URL, so it can't land in traces or logs.
+- `System.Security.Cryptography.Pkcs` pinned to 10.0.14 (SqlClient's transitive 9.0.13 has a
+  high-severity advisory). Drop the pin once SqlClient ships a fixed dependency.
+
+**Secrets.** Local dev: `dotnet user-secrets set Arcl:GeminiApiKey <key> --project api` (also
+`Arcl:ConnectionString`, `Arcl:AdminApiKey`). User-secrets only load when
+`ASPNETCORE_ENVIRONMENT=Development`. Production: environment variables set on the host, or a
+vault (the Azure Key Vault config provider if hosted on Azure). Never commit them to appsettings.json.
+
+**Deploy-time (not code):** a WAF in front (Azure Front Door/App Gateway WAF, Cloudflare, or
+equivalent) with bot/rate rules on `/api/chat*`, a real TLS certificate, and `api/models/` on
+the server (`dotnet publish` includes it automatically).
 
 ## Known simplifications worth knowing about
 

@@ -150,9 +150,11 @@ public sealed class AdminService
             """
             SELECT
                 cl.log_id, cl.created_at, s.selected_league AS league, cl.query, cl.response_text,
-                cl.route_path, cl.user_feedback, cl.reviewed_at, cl.admin_note
+                cl.route_path, cl.user_feedback, cl.reviewed_at, cl.admin_note,
+                hr.contact_name, hr.contact_email
             FROM dbo.conversation_log cl
             JOIN dbo.session_state s ON s.session_id = cl.session_id
+            LEFT JOIN dbo.handoff_requests hr ON hr.log_id = cl.log_id -- sql/008: contact-form submissions
             WHERE cl.route_path = 'human_handoff' OR cl.user_feedback = 0
             ORDER BY cl.created_at DESC
             """, conn);
@@ -170,7 +172,9 @@ public sealed class AdminService
                 reader.GetString(5),
                 reader.IsDBNull(6) ? null : reader.GetByte(6),
                 reader.IsDBNull(7) ? null : reader.GetDateTime(7),
-                reader.IsDBNull(8) ? null : reader.GetString(8)));
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                reader.IsDBNull(10) ? null : reader.GetString(10)));
         }
         return items;
     }

@@ -447,7 +447,19 @@ function renderReviewQueue(items) {
 
     appendCell(tr, new Date(item.createdAt).toLocaleString());
     appendCell(tr, item.league ?? "—");
-    appendCell(tr, item.routePath);
+    const routeCell = appendCell(tr, item.routePath);
+    // Contact-form submissions (sql/008_phase2_hardening.sql) — who to reply to. Shown under the
+    // route rather than in the query cell, which is line-clamped.
+    if (item.contactEmail) {
+      const contact = document.createElement("div");
+      contact.className = "cell-note";
+      contact.appendChild(document.createTextNode(`Reply to ${item.contactName ? item.contactName + " " : ""}`));
+      const mail = document.createElement("a");
+      mail.href = `mailto:${item.contactEmail}`;
+      mail.textContent = item.contactEmail;
+      contact.appendChild(mail);
+      routeCell.appendChild(contact);
+    }
 
     const feedbackText = item.userFeedback === 1 ? "👍" : item.userFeedback === 0 ? "👎" : "—";
     appendCell(tr, feedbackText);
