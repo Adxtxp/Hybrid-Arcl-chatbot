@@ -47,6 +47,8 @@ builder.Services.AddSingleton<RecrawlService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RecrawlService>());
 builder.Services.AddSingleton<MonitoringService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MonitoringService>());
+builder.Services.AddSingleton<HandoffNotifier>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<HandoffNotifier>());
 // Transient: it holds typed-HttpClient services (GeminiClient, TeamRankingService), which must
 // not be captured by a singleton or they'd keep one HttpClient forever.
 builder.Services.AddTransient<ChatOrchestrator>();
@@ -185,7 +187,12 @@ app.Use(async (context, next) =>
 // live behind this single address, which is what lets one link cover chat + admin + the embeddable
 // widget for anyone testing it, with no separate static file server and no cross-origin API calls.
 app.UseDefaultFiles();
-app.UseStaticFiles();
+// no-cache = "revalidate every time" (a cheap 304 when unchanged), not "don't cache". Without it,
+// browsers keep a stale widget.js/app.js for hours after an update — and the file names never change.
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = "no-cache",
+});
 
 // Same-origin is all the bundled frontend needs (widget.js embeds via an iframe, not cross-origin
 // fetches) — so CORS is off unless Arcl:Security:AllowedOrigins lists a separately-hosted frontend.
@@ -340,8 +347,7 @@ app.MapPost("/api/feedback", async (FeedbackRequest req, ConversationLogger logg
 // stored in handoff_requests and shown next to the question in the queue. Returns the message
 // text so the frontend renders the real contact info instead of keeping its own hardcoded copy.
 app.MapPost("/api/human-handoff", async (
-    HumanHandoffRequest req, ConversationLogger logger, EmailSender emailSender, SessionService sessions, ILoggerFactory loggerFactory,
-    IConfiguration config, CancellationToken ct) =>
+    HumanHandoffRequest req, ConversationLogger logger, HandoffNotifier notifier, IConfiguration config, CancellationToken ct) =>
 {
     var supportContact = SupportContact(config);
     var message = (req.Message ?? "").Trim();
@@ -368,39 +374,14 @@ app.MapPost("/api/human-handoff", async (
         reply, latencyMs: 0, tokenCostUsd: 0m, retrievedChunkIds: Array.Empty<Guid>(), ct: ct);
     if (!string.IsNullOrEmpty(email))
     {
-        await logger.LogHandoffRequestAsync(logId, req.SessionId, name, email, message, HandoffConsentText(config), ct);
+        var requestId = await logger.LogHandoffRequestAsync(logId, req.SessionId, name, email, message, HandoffConsentText(config), ct);
 
         // Phase 3 handoff: email the admins right away, with the conversation so far and the
         // visitor as Reply-To — replying to the email answers the visitor directly. Sent in the
-        // background so a slow mail server never delays the visitor's confirmation; a failure is
-        // logged (the request itself is already saved and shows in the admin review queue).
-        var transcript = await logger.GetTranscriptAsync(req.SessionId, 8, ct);
-        var league = await sessions.GetLeagueAsync(req.SessionId, ct);
-        var body = new StringBuilder()
-            .AppendLine($"{name ?? "A visitor"} <{email}> asked for help from a league admin" +
-                        (league is null ? "." : $" ({league.Value.ToDisplayName()} league)."))
-            .AppendLine()
-            .AppendLine("THEIR MESSAGE")
-            .AppendLine(message)
-            .AppendLine()
-            .AppendLine("CONVERSATION WITH THE BOT (oldest first)");
-        foreach (var (q, a) in transcript.Where(t => t.Question != message))
-        {
-            // "[§4]" is the chat UI's link syntax — in plain-text email, "(§4)" reads better.
-            var answer = a is null ? "—" : System.Text.RegularExpressions.Regex.Replace(a, @"\[§([^\]]+)\]", " (§$1)");
-            body.AppendLine($"  Visitor: {q}").AppendLine($"  Bot:     {answer}").AppendLine();
-        }
-        body.AppendLine("Reply to this email to answer them directly. It's also in the admin page's review queue — mark it")
-            .AppendLine("reviewed there once handled.");
-
-        var subject = $"Help request from {name ?? email}";
-        var visitorEmail = email;
-        var log = loggerFactory.CreateLogger("Handoff");
-        _ = Task.Run(async () =>
-        {
-            try { await emailSender.SendToAdminsAsync(subject, body.ToString(), replyTo: visitorEmail); }
-            catch (Exception ex) { log.LogError(ex, "Couldn't email admins about handoff request {LogId}.", logId); }
-        });
+        // background so a slow mail server never delays the visitor's confirmation. Delivery is
+        // tracked per request: if this send fails or the API restarts mid-send, HandoffNotifier's
+        // sweep retries it within a couple of minutes.
+        _ = Task.Run(() => notifier.SendAsync(requestId));
     }
 
     return Results.Ok(new { logId, message = reply });

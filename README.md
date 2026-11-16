@@ -78,6 +78,10 @@ powershell -File scripts/download-reranker.ps1
 # 3g. Phase 3: alerts + content-freshness tables (one-time, re-runnable, needs -I).
 sqlcmd -S <server> -d arcl -I -i sql/009_phase3_operations.sql
 
+# 3h. Reliable contact-request emails (one-time, re-runnable, needs -I): adds the delivery
+#     tracking columns HandoffNotifier uses to retry unsent admin emails every minute.
+sqlcmd -S <server> -d arcl -I -i sql/010_handoff_email_delivery.sql
+
 # 4. Copy the frontend into the API's wwwroot (see "Serving everything from one origin" below —
 #    api/wwwroot/ is what's actually served; frontend/ is the source you edit)
 cp frontend/*.html frontend/*.js frontend/*.css api/wwwroot/
@@ -260,6 +264,37 @@ doesn't leak either direction.
 Production note: the API's CORS policy is currently `AllowAnyOrigin()` (`api/Program.cs`, already
 flagged in-code as dev-only) — tighten it to the real arcl.org origin before this widget is
 embedded anywhere that isn't a test page.
+
+## Integration with the ARCL website (`D:\ARCL\ARCLCodercl`)
+
+The ARCL website (ASP.NET Web Forms, .NET Framework 4.8) is not in this repo; it belongs to ARCL.
+It only needs two small edits, recorded here so they can be redone on any copy of the site:
+
+1. **`web.config`**, under `<appSettings>`, gives the bot's address. A blank value hides the widget.
+   ```xml
+   <add key="ArclChatbotUrl" value="http://localhost:5000" />
+   ```
+2. **`Master/GeneralPage.master`, `DivisionPage.master`, `GeneralPageWithNoSidebar.master`**, just
+   before `</body>` (`GeneralPageBasic.master` is left out on purpose: it's only used by `WFResponse.aspx`):
+   ```aspx
+   <%-- ARCL chatbot launcher (bottom-right). Address is ArclChatbotUrl in web.config; blank hides it. --%>
+   <% var arclChatbotUrl = (System.Configuration.ConfigurationManager.AppSettings["ArclChatbotUrl"] ?? "").TrimEnd('/'); if (arclChatbotUrl.Length > 0) { %>
+   <script src="<%: arclChatbotUrl %>/widget.js?v=2" defer></script>
+   <% } %>
+   ```
+   Bump `?v=` whenever `widget.js` changes so browsers drop their cached copy.
+
+The bot only allows itself to be framed by the origins in `Arcl:Security:FrameAncestors`.
+`api/appsettings.Development.json` adds the site's IIS Express ports (`http://localhost:44355`,
+`https://localhost:44313`). Locally, use `https://localhost:44313`; the site's "Force HTTPS"
+rewrite sends plain HTTP to port 44355, which is wrong. To run both with one F5, `arcl.sln` can
+include `api/ArclChatbot.Api.csproj` and set it as a second startup project.
+
+In the widget (`?embed=1`), every page view starts at the Men's/Women's/Youth picker rather than
+resuming the last league. The standalone chat page still resumes.
+
+**Going live:** host the bot, set `ArclChatbotUrl` to its address, and add the live site's
+origin to `FrameAncestors` and to CORS.
 
 ## Serving everything from one origin
 

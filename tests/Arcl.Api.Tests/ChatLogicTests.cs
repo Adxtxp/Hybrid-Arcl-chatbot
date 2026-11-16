@@ -71,6 +71,24 @@ public class IntentClassifierTests
     [InlineData("Is it going to rain this weekend?")]
     public void Forecast_questions_do_not(string message) =>
         Assert.Equal(IntentRoute.Faq, Classifier.Classify(message).Route);
+
+    [Theory]
+    [InlineData("What happens if a match is stopped early due to rain?")]
+    [InlineData("Our match was rained out before we finished — what happens to the result?")]
+    [InlineData("It started drizzling and the umpire stopped play - is the game over?")]
+    [InlineData("Game got called off because of lightning in the 10th over")]
+    public void Messages_stating_a_weather_stoppage_skip_the_root_question(string message) =>
+        Assert.Equal("Yes", Classifier.Classify(message).RootAnswer);
+
+    [Theory]
+    [InlineData("Our game was abandoned")]                          // no weather — could be a no-show
+    [InlineData("What if it rains before our match starts?")]        // nothing stopped yet
+    public void Messages_that_do_not_still_get_asked(string message)
+    {
+        var intent = Classifier.Classify(message);
+        Assert.Equal("bad_weather", intent.DecisionTreeTopic);
+        Assert.Null(intent.RootAnswer);
+    }
 }
 
 public class SuggestionServiceTests

@@ -130,7 +130,7 @@ public sealed class ChatOrchestrator
 
             case IntentRoute.DecisionTree:
             {
-                var step = await _decisionTrees.StartAsync(req.SessionId, league, intent.DecisionTreeTopic!, ct);
+                var step = await _decisionTrees.StartAsync(req.SessionId, league, intent.DecisionTreeTopic!, intent.RootAnswer, ct);
                 if (step is null)
                 {
                     // Classifier recognized the topic but nobody's built that tree yet — hand off
