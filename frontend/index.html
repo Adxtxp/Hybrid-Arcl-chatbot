@@ -4,15 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>ARCL Rules Assistant</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%8F%3C/text%3E%3C/svg%3E" />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 
   <!-- Phase 3: Gatekeeper UI — blocks chat input until a league is chosen -->
   <div id="gatekeeper" class="overlay">
-    <div class="gatekeeper-card">
-      <div class="brand-mark">🏏</div>
-      <h1>ARCL Rules Assistant</h1>
+    <div class="gatekeeper-card" role="dialog" aria-labelledby="gatekeeper-title">
+      <div class="brand-mark" aria-hidden="true">🏏</div>
+      <h1 id="gatekeeper-title">ARCL Rules Assistant</h1>
       <p>Which league are you asking about?</p>
       <div class="league-buttons">
         <button class="league-btn" data-league="Mens">Men's</button>
@@ -25,7 +26,7 @@
   <div id="app" class="app hidden">
     <header class="app-header">
       <div class="header-title">
-        <span class="brand-mark brand-mark-sm">🏏</span> ARCL Rules Assistant
+        <span class="brand-mark brand-mark-sm" aria-hidden="true">🏏</span> ARCL Rules Assistant
         <span id="current-league-badge" class="league-badge"></span>
       </div>
       <div class="header-actions">
@@ -35,21 +36,61 @@
       </div>
     </header>
 
-    <main id="messages" class="messages"></main>
+    <!-- The visible transcript. aria-live is OFF here on purpose: a streamed answer arrives as
+         dozens of small text updates, and a live region would read every fragment aloud.
+         Screen readers get each finished reply once, via #sr-announcer below. -->
+    <main id="messages" class="messages" role="log" aria-label="Conversation" aria-live="off"></main>
+
+    <!-- One polite announcement per bot reply (and "Assistant is typing…"), set by app.js. -->
+    <div id="sr-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
     <!-- Decision-tree chips render here when the API returns options; hidden otherwise -->
     <div id="decision-chips" class="decision-chips hidden"></div>
 
     <form id="chat-form" class="chat-form">
-      <input id="chat-input" type="text" placeholder="Ask a rules question…" autocomplete="off" />
-      <button type="submit">Send</button>
+      <label for="chat-input" class="sr-only">Your question</label>
+      <input id="chat-input" type="text" placeholder="Ask a rules question…" autocomplete="off" maxlength="1000" />
+      <button type="submit" id="send-btn">Send</button>
     </form>
+  </div>
+
+  <!-- Phase 2: contact-admin form, with a related-sections step first and the consent line -->
+  <div id="contact-modal" class="overlay hidden">
+    <div class="contact-card" role="dialog" aria-modal="true" aria-labelledby="contact-title">
+      <h2 id="contact-title">Contact a league admin</h2>
+
+      <div id="contact-related" class="contact-related hidden">
+        <p>Before you send this, one of these sections might already answer it:</p>
+        <div id="contact-related-links" class="related-links"></div>
+      </div>
+
+      <form id="contact-form" novalidate>
+        <label>Your name <span class="optional">(optional)</span>
+          <input type="text" id="contact-name" maxlength="200" autocomplete="name" />
+        </label>
+        <label>Email address
+          <input type="email" id="contact-email" maxlength="320" autocomplete="email" required />
+        </label>
+        <label>What do you need help with?
+          <textarea id="contact-message" rows="4" maxlength="2000" required></textarea>
+        </label>
+        <label class="consent-row">
+          <input type="checkbox" id="contact-consent" required />
+          <span id="contact-consent-text">By submitting this form, you consent to ARCL collecting and using your details to respond to this request.</span>
+        </label>
+        <p id="contact-error" class="form-error hidden" role="alert"></p>
+        <div class="contact-actions">
+          <button type="button" id="contact-cancel-btn" class="secondary-btn">Cancel</button>
+          <button type="submit" id="contact-submit-btn" class="primary-btn">Send to an admin</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- Phase 3: NRR micro-widget — pure client-side, no backend call needed -->
   <div id="nrr-modal" class="overlay hidden">
-    <div class="nrr-card">
-      <h2>Net Run Rate Calculator</h2>
+    <div class="nrr-card" role="dialog" aria-modal="true" aria-labelledby="nrr-title">
+      <h2 id="nrr-title">Net Run Rate Calculator</h2>
       <p class="nrr-formula">NRR = (Runs Scored ÷ Overs Faced) − (Runs Conceded ÷ Overs Bowled)</p>
 
       <fieldset>
@@ -68,7 +109,7 @@
         Enter overs as balls-into-the-over ÷ 6, e.g. 15 overs 3 balls = 15 + 3/6 = 15.5 (not 15.3).
       </p>
 
-      <div class="nrr-result" id="nrr-result">—</div>
+      <div class="nrr-result" id="nrr-result" aria-live="polite">—</div>
 
       <button id="nrr-close-btn">Close</button>
     </div>

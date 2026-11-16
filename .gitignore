@@ -13,6 +13,9 @@ obj/
 api/wwwroot/*
 !api/wwwroot/.gitkeep
 
+# Cross-encoder model (~90 MB) — fetched by scripts/download-reranker.ps1, never committed
+api/models/
+
 # eval run output
 eval/results/
 eval/bin/Debug/*/results/
@@ -29,3 +32,6 @@ Thumbs.db
 /ingest/fetch_tree_sources.sql
 /ingest/fetch_womens_tail.sql
 /sql/002_fulltext_optional.sql.txt
+
+# Admin emails written locally when no SMTP server is configured (EmailSender.cs)
+api/outbox/

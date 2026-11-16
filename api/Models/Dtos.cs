@@ -50,7 +50,14 @@ public sealed record CreateSessionRequest(League? League);
 
 public sealed record SetLeagueRequest(League League);
 
-public sealed record ChatRequest(Guid SessionId, string Message);
+/// <summary>Regenerate = the visitor asked for a fresh answer to the same question (the ↻ button):
+/// the previous attempt is left out of conversation memory and the model runs warmer.</summary>
+public sealed record ChatRequest(Guid SessionId, string Message, bool Regenerate = false);
+
+/// <summary>The contact-admin form. Email + ConsentGiven are required together — a submission
+/// without an email (the pre-form "Contact Human Support" behavior) is still accepted and just
+/// logged, so older embedded copies of the widget keep working.</summary>
+public sealed record HumanHandoffRequest(Guid SessionId, string Message, string? Name = null, string? Email = null, bool ConsentGiven = false);
 
 public sealed record DecisionAnswerRequest(Guid SessionId, string SelectedOptionLabel);
 
@@ -70,14 +77,35 @@ public sealed record DecisionOption(string Label);
 /// What every chat turn returns, whatever route it took. Exactly one of
 /// (Citations, DecisionOptions) is meaningfully populated depending on RoutePath;
 /// LogId lets the frontend submit feedback for this specific turn.
+///
+/// Kind is what the frontend styles by — each one is a visually distinct state:
+///   "answer"         a grounded answer (Confidence says "high" or "medium"; medium gets a caveat)
+///   "low_confidence" on-topic, but nothing close enough to answer from — RelatedLinks + contact admin
+///   "out_of_scope"   not an ARCL question at all
+///   "error"          something failed on our side (Gemini/DB) — retry, not a content problem
+///   "handoff"        routed straight to a human (ambiguous/complaint, or no decision tree built)
+///   "decision"       a decision-tree step
+///   "team_ranking"   the live team-ranking lookup
+/// Message text is mostly inline-cited ("... [§4]") for answers — see GeminiClient's prompt.
 /// </summary>
 public sealed record ChatResponse(
     long LogId,
-    string RoutePath,          // "faq" | "decision_tree" | "human_handoff"
+    string RoutePath,          // "faq" | "decision_tree" | "human_handoff" | "team_ranking"
     string Message,
     IReadOnlyList<Citation> Citations,
     IReadOnlyList<DecisionOption> DecisionOptions,
-    bool IsTerminal);          // true when a decision tree has reached an answer (no further options)
+    bool IsTerminal,           // true when a decision tree has reached an answer (no further options)
+    string Kind = "answer",
+    string? Confidence = null, // "high" | "medium" | "low" | "out_of_scope" — FAQ route only
+    IReadOnlyList<Citation>? RelatedLinks = null,
+    IReadOnlyList<string>? FollowUps = null);
+
+/// <summary>Non-secret settings the chat page needs to render (the contact form's consent wording
+/// in particular — served from config so the text shown is exactly the text stored with each
+/// submission).</summary>
+public sealed record PublicConfigResponse(string SupportContact, string HandoffConsentText);
+
+public sealed record SuggestionsResponse(IReadOnlyList<string> Questions);
 
 // ---------------------------------------------------------------------- admin (Phase 5)
 
@@ -103,7 +131,8 @@ public sealed record LeagueQueryVolume(string? League, DateOnly Date, int QueryC
 /// plus the reviewed_at/admin_note tracking added by sql/005_admin_review_tracking.sql.</summary>
 public sealed record ReviewQueueItem(
     long LogId, DateTime CreatedAt, string? League, string Query, string? ResponseText,
-    string RoutePath, int? UserFeedback, DateTime? ReviewedAt, string? AdminNote);
+    string RoutePath, int? UserFeedback, DateTime? ReviewedAt, string? AdminNote,
+    string? ContactName = null, string? ContactEmail = null); // from handoff_requests, when the visitor filled in the contact form
 
 /// <summary>sql/004_dashboards.sql query #3 — sessions that entered a decision tree and have sat
 /// idle mid-tree for over an hour. Each one is a real user who didn't get an answer.</summary>
@@ -117,3 +146,20 @@ public sealed record TopChunkItem(string League, string SectionNumber, string Se
 /// human_handoff every time) — not in any of the 6 original dashboard queries, since none of
 /// them group by question. The literal "what does the bot keep failing on" list.</summary>
 public sealed record TopUnansweredItem(string Query, int TimesAsked, DateTime LastAsked);
+
+// ---------------------------------------------------------------------- admin: operations (Phase 3)
+
+/// <summary>One crawled arcl.org page (sql/009 source_pages) — the "Content freshness" table.</summary>
+public sealed record SourcePageItem(
+    string League, string Url, DateTime? LastCheckedAt, DateTime? LastSuccessAt, DateTime? LastChangedAt,
+    string? LastStatus, string? LastMessage, int? SectionsMatched);
+
+/// <summary>One week of retrieval quality — the drift trend (see DriftCheck in MonitoringService.cs).</summary>
+public sealed record DriftWeek(DateOnly WeekStart, int Turns, double? AvgBestDistance, double LowShare);
+
+public sealed record BudgetSummary(decimal SpentUsd, decimal CapUsd, double PercentUsed, bool Exhausted);
+
+/// <summary>GET /api/admin/health — everything the "System health" panel shows.</summary>
+public sealed record AdminHealth(
+    IReadOnlyList<Arcl.Api.Services.AlertItem> Alerts, BudgetSummary Budget, IReadOnlyList<SourcePageItem> Sources,
+    IReadOnlyList<DriftWeek> Drift, bool EmailConfigured);

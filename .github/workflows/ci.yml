@@ -1,0 +1,34 @@
+# Build + unit tests on every push and PR. The golden Q&A regression set needs the real database
+# and a Gemini key, so it runs as the pre-deploy gate instead (scripts/predeploy.ps1), not here.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build
+        run: |
+          dotnet build api/ArclChatbot.Api.csproj -c Release
+          dotnet build ingest/Ingest.csproj -c Release
+          dotnet build eval/EvalRunner.csproj -c Release
+
+      # The cross-encoder smoke test skips itself when the model isn't downloaded, which it isn't
+      # here — everything else (BM25, tokenizer, sanitizer, output filter, chat logic) runs.
+      - name: Unit tests
+        run: dotnet test tests/Arcl.Api.Tests/Arcl.Api.Tests.csproj -c Release
+
+      - name: Check for vulnerable packages
+        run: |
+          dotnet list api/ArclChatbot.Api.csproj package --vulnerable --include-transitive | tee vuln.txt
+          ! grep -q "has the following vulnerable packages" vuln.txt

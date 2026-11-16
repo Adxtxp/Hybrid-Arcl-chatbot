@@ -150,9 +150,11 @@ public sealed class AdminService
             """
             SELECT
                 cl.log_id, cl.created_at, s.selected_league AS league, cl.query, cl.response_text,
-                cl.route_path, cl.user_feedback, cl.reviewed_at, cl.admin_note
+                cl.route_path, cl.user_feedback, cl.reviewed_at, cl.admin_note,
+                hr.contact_name, hr.contact_email
             FROM dbo.conversation_log cl
             JOIN dbo.session_state s ON s.session_id = cl.session_id
+            LEFT JOIN dbo.handoff_requests hr ON hr.log_id = cl.log_id -- sql/008: contact-form submissions
             WHERE cl.route_path = 'human_handoff' OR cl.user_feedback = 0
             ORDER BY cl.created_at DESC
             """, conn);
@@ -170,7 +172,9 @@ public sealed class AdminService
                 reader.GetString(5),
                 reader.IsDBNull(6) ? null : reader.GetByte(6),
                 reader.IsDBNull(7) ? null : reader.GetDateTime(7),
-                reader.IsDBNull(8) ? null : reader.GetString(8)));
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                reader.IsDBNull(10) ? null : reader.GetString(10)));
         }
         return items;
     }
@@ -254,6 +258,62 @@ public sealed class AdminService
                 reader.GetInt32(3)));
         }
         return items;
+    }
+
+    // Content freshness: what the nightly re-crawl (RecrawlService.cs) found for each page.
+    public async Task<IReadOnlyList<SourcePageItem>> GetSourcesAsync(CancellationToken ct = default)
+    {
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(
+            """
+            SELECT league, url, last_checked_at, last_success_at, last_changed_at, last_status, last_message, sections_matched
+            FROM dbo.source_pages
+            ORDER BY league, url
+            """, conn);
+
+        var items = new List<SourcePageItem>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            items.Add(new SourcePageItem(
+                reader.GetString(0), reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetDateTime(2),
+                reader.IsDBNull(3) ? null : reader.GetDateTime(3),
+                reader.IsDBNull(4) ? null : reader.GetDateTime(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.IsDBNull(6) ? null : reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetInt32(7)));
+        }
+        return items;
+    }
+
+    // Retrieval quality per week (last 8 weeks) — the trend behind the drift alert (DriftCheck).
+    // Weeks start on Monday; only turns that went through the confidence gate have a best_distance.
+    public async Task<IReadOnlyList<DriftWeek>> GetDriftTrendAsync(CancellationToken ct = default)
+    {
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(
+            """
+            SELECT DATEADD(DAY, -((DATEPART(WEEKDAY, created_at) + @@DATEFIRST - 2) % 7), CAST(created_at AS DATE)) AS week_start,
+                   COUNT(*),
+                   AVG(best_distance),
+                   AVG(CASE WHEN confidence_tier IN ('low', 'out_of_scope') THEN 1.0 ELSE 0.0 END)
+            FROM dbo.conversation_log
+            WHERE best_distance IS NOT NULL AND created_at >= DATEADD(WEEK, -8, SYSUTCDATETIME())
+            GROUP BY DATEADD(DAY, -((DATEPART(WEEKDAY, created_at) + @@DATEFIRST - 2) % 7), CAST(created_at AS DATE))
+            ORDER BY week_start
+            """, conn);
+
+        var weeks = new List<DriftWeek>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            weeks.Add(new DriftWeek(DateOnly.FromDateTime(reader.GetDateTime(0)), reader.GetInt32(1),
+                reader.IsDBNull(2) ? null : reader.GetDouble(2), (double)reader.GetDecimal(3)));
+        }
+        return weeks;
     }
 
     // The same question, asked more than once, that the bot has NEVER answered (every occurrence
