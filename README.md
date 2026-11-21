@@ -277,12 +277,15 @@ It only needs two small edits, recorded here so they can be redone on any copy o
 2. **`Master/GeneralPage.master`, `DivisionPage.master`, `GeneralPageWithNoSidebar.master`**, just
    before `</body>` (`GeneralPageBasic.master` is left out on purpose: it's only used by `WFResponse.aspx`):
    ```aspx
-   <%-- ARCL chatbot launcher (bottom-right). Address is ArclChatbotUrl in web.config; blank hides it. --%>
+   <%-- ARCL chatbot launcher (bottom-right). Address is ArclChatbotUrl in web.config; blank hides it.
+        Retries every 3 s (up to 2 min) if the chatbot isn't up yet, e.g. both just started with F5. --%>
    <% var arclChatbotUrl = (System.Configuration.ConfigurationManager.AppSettings["ArclChatbotUrl"] ?? "").TrimEnd('/'); if (arclChatbotUrl.Length > 0) { %>
-   <script src="<%: arclChatbotUrl %>/widget.js?v=2" defer></script>
+   <script>(function (src, tries) { (function load() { var s = document.createElement("script"); s.src = src; s.onerror = function () { s.parentNode.removeChild(s); if (--tries > 0) setTimeout(load, 3000); }; document.body.appendChild(s); })(); })("<%= HttpUtility.JavaScriptStringEncode(arclChatbotUrl) %>/widget.js?v=2", 40);</script>
    <% } %>
    ```
-   Bump `?v=` whenever `widget.js` changes so browsers drop their cached copy.
+   Bump `?v=` whenever `widget.js` changes so browsers drop their cached copy. The retry matters
+   when the site and the bot start together (one F5): the bot needs a few seconds to load the
+   re-ranker model, and a plain `<script src>` would give up on the first failed request.
 
 The bot only allows itself to be framed by the origins in `Arcl:Security:FrameAncestors`.
 `api/appsettings.Development.json` adds the site's IIS Express ports (`http://localhost:44355`,
