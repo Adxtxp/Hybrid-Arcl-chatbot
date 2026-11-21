@@ -268,7 +268,7 @@ document.getElementById("test-email-btn").addEventListener("click", async (e) =>
   try {
     const r = await (await adminFetch("/api/admin/test-email", { method: "POST" })).json();
     out.textContent = r.sent
-      ? (r.smtp ? `Sent to ${r.recipients.join(", ")}.` : "Saved to api/outbox (SMTP not configured).")
+      ? (r.smtp ? `Sent to ${r.recipients.join(", ")}${r.cc?.length ? `, cc ${r.cc.join(", ")}` : ""}.` : "Saved to api/outbox (SMTP not configured).")
       : `Failed: ${r.error}`;
   } catch {
     out.textContent = "Couldn't reach the API.";

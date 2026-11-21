@@ -452,7 +452,7 @@ app.MapPost("/api/admin/test-email", async (EmailSender email, CancellationToken
     {
         await email.SendToAdminsAsync("Test email from the ARCL Rules Assistant",
             "If you're reading this, alert and help-request emails will reach you.", ct: ct);
-        return Results.Ok(new { sent = true, smtp = email.IsSmtpConfigured, recipients = email.AdminRecipients });
+        return Results.Ok(new { sent = true, smtp = email.IsSmtpConfigured, recipients = email.AdminRecipients, cc = email.CcRecipients });
     }
     catch (Exception ex)
     {

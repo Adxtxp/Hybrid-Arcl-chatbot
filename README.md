@@ -497,7 +497,7 @@ plus the error). Each alert type has a cooldown, so an ongoing problem sends one
 check. **Until SMTP is configured, emails are written as `.eml` files to `api/outbox/`** (open
 them in Outlook). To send real email, set `Arcl:Email:*`. For example, with Gmail:
 `SmtpHost` = `smtp.gmail.com`, `SmtpPort` 587, `Username` = the account, `AdminRecipients` = who
-gets them, and the password (a Gmail **app password**, not the account password) via
+gets them, `CcRecipients` (optional) = who is copied on them, and the password (a Gmail **app password**, not the account password) via
 `dotnet user-secrets set Arcl:Email:Password ... --project api` or the `ARCL_SMTP_PASSWORD` env var.
 
 | alert | fires when | cooldown |

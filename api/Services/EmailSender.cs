@@ -27,6 +27,8 @@ public sealed class EmailSender
     private readonly string _pickupDirectory;
 
     public IReadOnlyList<string> AdminRecipients { get; }
+    /// <summary>Arcl:Email:CcRecipients — copied on every admin email (e.g. the developer, to confirm delivery).</summary>
+    public IReadOnlyList<string> CcRecipients { get; }
     public bool IsSmtpConfigured => _host is not null;
 
     public EmailSender(IConfiguration config, IHostEnvironment env, ILogger<EmailSender> logger)
@@ -42,6 +44,9 @@ public sealed class EmailSender
         _from = config.GetNonEmpty("Arcl:Email:From") ?? _username ?? supportContact;
         var recipients = config.GetSection("Arcl:Email:AdminRecipients").Get<string[]>();
         AdminRecipients = recipients is { Length: > 0 } ? recipients : new[] { supportContact };
+        CcRecipients = (config.GetSection("Arcl:Email:CcRecipients").Get<string[]>() ?? [])
+            .Where(cc => !string.IsNullOrWhiteSpace(cc) && !AdminRecipients.Contains(cc, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
 
         var pickup = config.GetNonEmpty("Arcl:Email:PickupDirectory") ?? "outbox";
         _pickupDirectory = Path.IsPathRooted(pickup) ? pickup : Path.Combine(env.ContentRootPath, pickup);
@@ -57,6 +62,7 @@ public sealed class EmailSender
     {
         using var message = new MailMessage { From = new MailAddress(_from, "ARCL Rules Assistant"), Subject = subject, Body = body };
         foreach (var to in AdminRecipients) message.To.Add(to);
+        foreach (var cc in CcRecipients) message.CC.Add(cc);
         if (!string.IsNullOrWhiteSpace(replyTo)) message.ReplyToList.Add(replyTo);
 
         using var client = new SmtpClient();
