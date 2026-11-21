@@ -19,6 +19,10 @@ const API_BASE = ""; // same-origin: this file is served from the API's own wwwr
 const VIZ = { series1: "#2a78d6", series2: "#eb6834", series3: "#1baf7a", series4: "#eda100" };
 
 let adminKey = null;
+// Set instead of adminKey when opened from the ARCL website's admin-only Chatbot Dashboard page,
+// which passes a short-lived signed token in the URL fragment (#sso=...) — a fragment never reaches
+// any server log. See api/Services/SiteSsoToken.cs.
+let adminToken = null;
 
 const el = {
   gate: document.getElementById("admin-gate"),
@@ -72,7 +76,7 @@ setupScrollSpy();
 async function adminFetch(path, options = {}) {
   const resp = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: { ...(options.headers ?? {}), "X-Admin-Key": adminKey },
+    headers: { ...(options.headers ?? {}), ...(adminToken ? { "X-Admin-Token": adminToken } : { "X-Admin-Key": adminKey }) },
   });
   return resp;
 }
@@ -83,6 +87,11 @@ el.keyForm.addEventListener("submit", async (e) => {
   if (!candidate) return;
 
   adminKey = candidate;
+  adminToken = null;
+  await unlock("Invalid admin key.");
+});
+
+async function unlock(failureMessage) {
   el.keyError.classList.add("hidden");
 
   // Charts measure their own container's clientWidth to lay themselves out and to position
@@ -96,11 +105,13 @@ el.keyForm.addEventListener("submit", async (e) => {
   const ok = await loadAll();
   if (!ok) {
     adminKey = null;
+    adminToken = null;
     el.app.classList.add("hidden");
     el.gate.classList.remove("hidden");
+    el.keyError.textContent = failureMessage;
     el.keyError.classList.remove("hidden");
   }
-});
+}
 
 el.refreshBtn.addEventListener("click", () => loadAll());
 
@@ -669,4 +680,12 @@ async function markReviewed(logId, note) {
     body: JSON.stringify({ note: note || null }),
   });
   if (!resp.ok) alert("Couldn't mark this reviewed. Please try again.");
+}
+
+// Last, so everything above is defined before unlock() runs.
+const ssoToken = new URLSearchParams(location.hash.slice(1)).get("sso");
+if (ssoToken) {
+  history.replaceState(null, "", location.pathname + location.search); // keep it out of history/copied links
+  adminToken = ssoToken;
+  unlock("Your sign-in from the ARCL website has expired. Reopen Chatbot Dashboard from Secure Links, or enter the admin key.");
 }

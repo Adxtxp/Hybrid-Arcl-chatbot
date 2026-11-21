@@ -293,6 +293,14 @@ include `api/ArclChatbot.Api.csproj` and set it as a second startup project.
 In the widget (`?embed=1`), every page view starts at the Men's/Women's/Youth picker rather than
 resuming the last league. The standalone chat page still resumes.
 
+**Admin dashboard behind the site's admin login:** `Pages/Secure/ChatbotDashboard.aspx` (linked
+from Secure Links, admin panel) checks `Authenticator.IsAdmin`, then shows `admin.html` in an iframe
+already signed in. It does this with an 8-hour token in the URL fragment (`#sso=`), signed with
+`ArclChatbotSsoSecret` from `web.config`; the bot checks it against `Arcl:SiteSsoSecret`
+(user-secrets locally, or the `ARCL_SITE_SSO_SECRET` env var), and the two values must match. The
+token format is in `api/Services/SiteSsoToken.cs`. With no secret set, the bot accepts only
+`X-Admin-Key`.
+
 **Going live:** host the bot, set `ArclChatbotUrl` to its address, and add the live site's
 origin to `FrameAncestors` and to CORS.
 

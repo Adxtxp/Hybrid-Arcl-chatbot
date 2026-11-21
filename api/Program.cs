@@ -62,6 +62,11 @@ var adminApiKey = builder.Configuration.GetNonEmpty("Arcl:AdminApiKey")
     ?? Environment.GetEnvironmentVariable("ARCL_ADMIN_API_KEY")
     ?? throw new InvalidOperationException("Set Arcl:AdminApiKey (appsettings) or ARCL_ADMIN_API_KEY (env var).");
 var adminApiKeyBytes = Encoding.UTF8.GetBytes(adminApiKey);
+// Optional: lets the ARCL website's admin login open the dashboard (see SiteSsoToken). Unset =
+// only X-Admin-Key works.
+var siteSsoSecret = builder.Configuration.GetNonEmpty("Arcl:SiteSsoSecret")
+    ?? Environment.GetEnvironmentVariable("ARCL_SITE_SSO_SECRET");
+var siteSsoSecretBytes = siteSsoSecret is null ? null : Encoding.UTF8.GetBytes(siteSsoSecret);
 
 var maxMessageLength = builder.Configuration.GetValue<int?>("Arcl:MaxMessageLength") ?? 1000;
 
@@ -208,10 +213,13 @@ app.Use(async (context, next) =>
     if (context.Request.Path.StartsWithSegments("/api/admin"))
     {
         var providedKey = context.Request.Headers["X-Admin-Key"].FirstOrDefault();
-        if (providedKey is null || !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(providedKey), adminApiKeyBytes))
+        var keyOk = providedKey is not null && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(providedKey), adminApiKeyBytes);
+        var tokenOk = !keyOk && siteSsoSecretBytes is not null
+            && SiteSsoToken.IsValid(context.Request.Headers["X-Admin-Token"].FirstOrDefault(), siteSsoSecretBytes, DateTimeOffset.UtcNow);
+        if (!keyOk && !tokenOk)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await context.Response.WriteAsJsonAsync(new { error = "Missing or invalid X-Admin-Key header." });
+            await context.Response.WriteAsJsonAsync(new { error = "Missing or invalid X-Admin-Key / X-Admin-Token header." });
             return;
         }
     }
